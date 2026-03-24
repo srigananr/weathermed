@@ -1,0 +1,57 @@
+{
+  "features": [
+    "temp_max",
+    "temp_min",
+    "weathercode",
+    "humidity"
+  ],
+  "tree": {
+    "type": "node",
+    "feature": "weathercode",
+    "threshold": 24.0,
+    "left": {
+      "type": "node",
+      "feature": "temp_max",
+      "threshold": 27.0,
+      "left": {
+        "type": "leaf",
+        "prediction": "Common Cold"
+      },
+      "right": {
+        "type": "leaf",
+        "prediction": "Heat Stroke"
+      }
+    },
+    "right": {
+      "type": "node",
+      "feature": "weathercode",
+      "threshold": 62.0,
+      "left": {
+        "type": "leaf",
+        "prediction": "Flu"
+      },
+      "right": {
+        "type": "node",
+        "feature": "temp_max",
+        "threshold": 20.0,
+        "left": {
+          "type": "leaf",
+          "prediction": "Hypothermia"
+        },
+        "right": {
+          "type": "node",
+          "feature": "temp_min",
+          "threshold": 24.0,
+          "left": {
+            "type": "leaf",
+            "prediction": "Malaria"
+          },
+          "right": {
+            "type": "leaf",
+            "prediction": "Dengue"
+          }
+        }
+      }
+    }
+  }
+}

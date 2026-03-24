@@ -1,0 +1,30 @@
+{
+  "global": [],
+  "chennai": [
+    {
+      "id": "h5n1-bird-flu",
+      "name": "H5N1 (Bird Flu)",
+      "active": true,
+      "prevention": "Avoid live poultry markets, practice good hand hygiene, and cook poultry thoroughly.",
+      "notes": "Local reports indicate occasional poultry cases; human transmission is rare but caution is advised."
+    }
+  ],
+  "mumbai": [
+    {
+      "id": "dengue-outbreak",
+      "name": "Dengue Fever",
+      "active": true,
+      "prevention": "Use mosquito repellents, eliminate standing water, and wear protective clothing.",
+      "notes": "Increased cases reported in monsoon season."
+    }
+  ],
+  "delhi": [
+    {
+      "id": "air-pollution-flu",
+      "name": "Respiratory Issues from Pollution",
+      "active": true,
+      "prevention": "Wear masks outdoors, stay indoors during high pollution, and use air purifiers.",
+      "notes": "High pollution levels are exacerbating flu and respiratory diseases."
+    }
+  ]
+}
