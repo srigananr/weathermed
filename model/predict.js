@@ -1,116 +1,105 @@
+import { PREDICT_API_URL } from '../config';
 import model from './tree_model.json';
 
-function traverse(node, features) {
-  if (!node || node.type === 'leaf') {
-    return node ? node.prediction : null;
-  }
+const GENDER_MAP = { male: 0, female: 1, other: 2 };
 
+function traverse(node, features) {
+  if (!node || node.type === 'leaf') return node ? node.prediction : null;
   const value = features[node.feature];
   if (value == null || Number.isNaN(value)) return null;
-
-  if (value <= node.threshold) {
-    return traverse(node.left, features);
-  }
-  return traverse(node.right, features);
+  return value <= node.threshold
+    ? traverse(node.left, features)
+    : traverse(node.right, features);
 }
 
 /**
- * Predicts diseases from weather + user symptom features.
- * Returns multiple possible diseases based on weather conditions and symptoms.
+ * Predicts diseases using XGBoost API (all 50 features).
+ * Falls back to the local decision tree + rules when offline.
  *
- * @param {{
- *   tempMax: number,
- *   tempMin: number,
- *   weatherCode: number,
- *   humidity: number,
- *   age?: number,
- *   gender?: string,
- *   symptoms?: Record<string, boolean>
- * }} features
- * @returns {string[]} Array of predicted diseases
+ * @returns {Promise<string[]>}
  */
-export function predictDisease({
-  tempMax,
-  tempMin,
-  weatherCode,
-  humidity,
-  age,
-  gender,
-  symptoms,
+export async function predictDisease({
+  tempMax, tempMin, weatherCode, humidity, windSpeed, age, gender, symptoms,
 }) {
-  const genderMap = {
-    male: 0,
-    female: 1,
-    other: 2,
-  };
+  try {
+    const payload = {
+      age: age == null ? 0 : Number(age),
+      gender: gender == null ? 0 : (GENDER_MAP[String(gender).toLowerCase()] ?? 0),
+      temperature_c: (Number(tempMax) + Number(tempMin)) / 2,
+      humidity: humidity == null ? 0 : Number(humidity),
+      wind_speed_km_h: windSpeed == null ? 0 : Number(windSpeed),
+      // pain_behind_eyes is a duplicate key in the model training data
+      pain_behind_eyes: symptoms?.pain_behind_the_eyes ? 1 : 0,
+    };
 
+    if (symptoms) {
+      Object.entries(symptoms).forEach(([key, val]) => {
+        payload[key] = val ? 1 : 0;
+      });
+    }
+
+    const response = await fetch(`${PREDICT_API_URL}/predict`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (response.ok) {
+      const { predictions } = await response.json();
+      if (predictions && predictions.length > 0) {
+        return predictions.map(p => p.disease);
+      }
+    }
+  } catch (err) {
+    console.warn('XGBoost API unavailable, using local tree.', err.message);
+  }
+
+  return localPredict({ tempMax, tempMin, weatherCode, humidity, age, gender, symptoms });
+}
+
+function localPredict({ tempMax, tempMin, weatherCode, humidity, symptoms }) {
   const normalized = {
     temp_max: Number(tempMax),
     temp_min: Number(tempMin),
     weathercode: Number(weatherCode),
     humidity: humidity == null ? 0 : Number(humidity),
-    age: age == null ? 0 : Number(age),
-    gender: gender == null ? 0 : genderMap[gender.toString().toLowerCase()] ?? 0,
   };
-
   if (symptoms) {
-    Object.entries(symptoms).forEach(([key, value]) => {
-      normalized[key] = value ? 1 : 0;
-    });
+    Object.entries(symptoms).forEach(([key, val]) => { normalized[key] = val ? 1 : 0; });
   }
 
   const predictions = [];
-  
-  // Get the primary prediction from the tree
-  const primaryPrediction = traverse(model.tree, normalized);
-  if (primaryPrediction) {
-    predictions.push(primaryPrediction);
-  }
+  const primary = traverse(model.tree, normalized);
+  if (primary) predictions.push(primary);
 
-  // Add secondary predictions based on weather conditions
   const tempAvg = (tempMax + tempMin) / 2;
 
-  // High temperature risk
   if (tempAvg > 35) {
     if (!predictions.includes('Heat Stroke')) predictions.push('Heat Stroke');
     if (!predictions.includes('Dengue') && humidity > 60) predictions.push('Dengue');
   }
-
-  // Moderate-high temperature with humidity (mosquito-borne diseases)
   if (tempAvg > 25 && humidity > 65) {
     if (!predictions.includes('Dengue')) predictions.push('Dengue');
     if (!predictions.includes('Malaria')) predictions.push('Malaria');
   }
-
-  // Low temperature risk
   if (tempAvg < 10) {
     if (!predictions.includes('Hypothermia')) predictions.push('Hypothermia');
     if (!predictions.includes('Flu')) predictions.push('Flu');
   }
-
-  // Rainy weather (weather codes 51-82)
   if (weatherCode >= 51 && weatherCode <= 82) {
     if (!predictions.includes('Common Cold')) predictions.push('Common Cold');
     if (!predictions.includes('Flu') && tempAvg < 20) predictions.push('Flu');
   }
-
-  // Fog or low visibility
   if (weatherCode === 45 || weatherCode === 48) {
     if (!predictions.includes('Respiratory Issues')) predictions.push('Respiratory Issues');
   }
 
-  // If user reports high fever or specific symptoms
   const hasFever = symptoms?.high_fever || symptoms?.fever;
-  const hasRespiratory = symptoms?.cough || symptoms?.runny_nose || symptoms?.sore_throat;
   const hasJointPain = symptoms?.joint_pain || symptoms?.body_aches;
+  const hasRespiratory = symptoms?.cough || symptoms?.runny_nose || symptoms?.sore_throat;
 
-  if (hasFever && hasJointPain && !predictions.includes('Dengue')) {
-    predictions.push('Dengue');
-  }
-
-  if (hasRespiratory && tempAvg < 20 && !predictions.includes('Flu')) {
-    predictions.push('Flu');
-  }
+  if (hasFever && hasJointPain && !predictions.includes('Dengue')) predictions.push('Dengue');
+  if (hasRespiratory && tempAvg < 20 && !predictions.includes('Flu')) predictions.push('Flu');
 
   return predictions.length > 0 ? predictions : ['No disease predicted'];
 }

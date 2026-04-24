@@ -32,6 +32,7 @@ import axios from 'axios';
 import * as Location from 'expo-location';
 import { predictDisease } from './model/predict';
 import { getOutbreaks } from './services/outbreakService';
+import { OUTBREAK_API_URL } from './config';
 
 const PREVENTION_BY_DISEASE = {
   'Heat Stroke': 'Stay hydrated, avoid direct sun exposure, and take breaks in the shade.',
@@ -323,7 +324,7 @@ export default function App() {
           params: {
             latitude: coords.latitude,
             longitude: coords.longitude,
-            daily: 'temperature_2m_max,temperature_2m_min,weathercode',
+            daily: 'temperature_2m_max,temperature_2m_min,weathercode,windspeed_10m_max',
             hourly: 'relativehumidity_2m',
             timezone: 'Asia/Kolkata',
           },
@@ -336,7 +337,7 @@ export default function App() {
 
     const fetchOutbreaks = async () => {
       try {
-        const backendUrl = `http://localhost:3000/api/outbreaks?region=${encodeURIComponent(effectiveRegion)}`;
+        const backendUrl = `${OUTBREAK_API_URL}/api/outbreaks?region=${encodeURIComponent(effectiveRegion)}`;
         const response = await fetch(backendUrl);
         if (response.ok) {
           const { outbreaks: list } = await response.json();
@@ -357,7 +358,7 @@ export default function App() {
     setRegionLabel(effectiveLabel);
   }, [regionKey, gpsRegion]);
 
-  const onDayPress = (day) => {
+  const onDayPress = async (day) => {
     setSelectedDate(day.dateString);
     setModalVisible(true);
     setLoading(true);
@@ -368,6 +369,7 @@ export default function App() {
         const tempMax = forecastData.daily.temperature_2m_max[index];
         const tempMin = forecastData.daily.temperature_2m_min[index];
         const weatherCode = forecastData.daily.weathercode[index];
+        const windSpeed = forecastData.daily.windspeed_10m_max?.[index] ?? 0;
 
         const hourlyTimes = forecastData.hourly.time || [];
         const hourlyHumidity = forecastData.hourly.relativehumidity_2m || [];
@@ -387,13 +389,15 @@ export default function App() {
           tempMax,
           tempMin,
           humidity,
+          windSpeed,
         });
 
-        const diseaseList = predictDisease({
+        const diseaseList = await predictDisease({
           tempMax,
           tempMin,
           weatherCode,
           humidity,
+          windSpeed,
           age: user?.age,
           gender: user?.gender,
           symptoms: selectedSymptoms,
@@ -665,6 +669,9 @@ export default function App() {
                 </Text>
                 <Text style={styles.modalText}>
                   Humidity: {weatherData && typeof weatherData.humidity === 'number' ? `${weatherData.humidity.toFixed(0)}%` : '-'}
+                </Text>
+                <Text style={styles.modalText}>
+                  Wind Speed: {weatherData && typeof weatherData.windSpeed === 'number' ? `${weatherData.windSpeed} km/h` : '-'}
                 </Text>
                 {data && data.length > 0 ? (
                   <View>
