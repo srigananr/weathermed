@@ -28,7 +28,6 @@ export async function predictDisease({
       temperature_c: (Number(tempMax) + Number(tempMin)) / 2,
       humidity: humidity == null ? 0 : Number(humidity),
       wind_speed_km_h: windSpeed == null ? 0 : Number(windSpeed),
-      // pain_behind_eyes is a duplicate key in the model training data
       pain_behind_eyes: symptoms?.pain_behind_the_eyes ? 1 : 0,
     };
 
@@ -38,11 +37,17 @@ export async function predictDisease({
       });
     }
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
     const response = await fetch(`${PREDICT_API_URL}/predict`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
+      signal: controller.signal,
     });
+
+    clearTimeout(timeout);
 
     if (response.ok) {
       const { predictions } = await response.json();

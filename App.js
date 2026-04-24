@@ -359,63 +359,67 @@ export default function App() {
   }, [regionKey, gpsRegion]);
 
   const onDayPress = async (day) => {
-    setSelectedDate(day.dateString);
-    setModalVisible(true);
-    setLoading(true);
+    try {
+      setSelectedDate(day.dateString);
+      setModalVisible(true);
+      setLoading(true);
 
-    if (forecastData) {
-      const index = forecastData.daily.time.findIndex(date => date === day.dateString);
-      if (index !== -1) {
-        const tempMax = forecastData.daily.temperature_2m_max[index];
-        const tempMin = forecastData.daily.temperature_2m_min[index];
-        const weatherCode = forecastData.daily.weathercode[index];
-        const windSpeed = forecastData.daily.windspeed_10m_max?.[index] ?? 0;
+      if (forecastData) {
+        const index = forecastData.daily.time.findIndex(date => date === day.dateString);
+        if (index !== -1) {
+          const tempMax = forecastData.daily.temperature_2m_max[index];
+          const tempMin = forecastData.daily.temperature_2m_min[index];
+          const weatherCode = forecastData.daily.weathercode[index];
+          const windSpeed = forecastData.daily.windspeed_10m_max?.[index] ?? 0;
 
-        const hourlyTimes = forecastData.hourly.time || [];
-        const hourlyHumidity = forecastData.hourly.relativehumidity_2m || [];
-        const dayHumidityValues = hourlyTimes
-          .map((t, i) => ({ t, h: hourlyHumidity[i] }))
-          .filter(({ t }) => t.startsWith(day.dateString))
-          .map(({ h }) => h)
-          .filter((h) => h != null);
+          const hourlyTimes = forecastData.hourly.time || [];
+          const hourlyHumidity = forecastData.hourly.relativehumidity_2m || [];
+          const dayHumidityValues = hourlyTimes
+            .map((t, i) => ({ t, h: hourlyHumidity[i] }))
+            .filter(({ t }) => t.startsWith(day.dateString))
+            .map(({ h }) => h)
+            .filter((h) => h != null);
 
-        const humidity =
-          dayHumidityValues.length > 0
-            ? dayHumidityValues.reduce((a, b) => a + b, 0) / dayHumidityValues.length
-            : null;
+          const humidity =
+            dayHumidityValues.length > 0
+              ? dayHumidityValues.reduce((a, b) => a + b, 0) / dayHumidityValues.length
+              : null;
 
-        setWeatherData({
-          description: weatherCodeToDescription(weatherCode),
-          tempMax,
-          tempMin,
-          humidity,
-          windSpeed,
-        });
+          setWeatherData({
+            description: weatherCodeToDescription(weatherCode),
+            tempMax,
+            tempMin,
+            humidity,
+            windSpeed,
+          });
 
-        const diseaseList = await predictDisease({
-          tempMax,
-          tempMin,
-          weatherCode,
-          humidity,
-          windSpeed,
-          age: user?.age,
-          gender: user?.gender,
-          symptoms: selectedSymptoms,
-        });
+          const diseaseList = await predictDisease({
+            tempMax,
+            tempMin,
+            weatherCode,
+            humidity,
+            windSpeed,
+            age: user?.age,
+            gender: user?.gender,
+            symptoms: selectedSymptoms,
+          });
 
-        setPredictions(diseaseList);
-      } else {
-        setWeatherData({
-          description: 'No forecast available',
-          tempMax: null,
-          tempMin: null,
-          humidity: null,
-        });
-        setPredictions([]);
+          setPredictions(diseaseList);
+        } else {
+          setWeatherData({
+            description: 'No forecast available',
+            tempMax: null,
+            tempMin: null,
+            humidity: null,
+          });
+          setPredictions([]);
+        }
       }
+    } catch (err) {
+      console.warn('onDayPress error:', err.message);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   const activeRegion = gpsRegion || regionKey;
