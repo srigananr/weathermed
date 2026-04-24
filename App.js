@@ -611,26 +611,6 @@ export default function App() {
       </Pressable>
 
 
-      {/* Weather image above date in modal */}
-      <View style={{ alignItems: 'center', marginBottom: 8 }}>
-        {selectedDate && forecastData && forecastData.daily && forecastData.daily.time && (() => {
-          const idx = forecastData.daily.time.findIndex(date => date === selectedDate);
-          if (idx !== -1) {
-            const code = forecastData.daily.weathercode[idx];
-            return (
-              <Image
-                source={{ uri: weatherCodeToIcon(code) }}
-                style={{ width: 60, height: 60, marginBottom: 4, alignSelf: 'center' }}
-                resizeMode="contain"
-                accessibilityLabel={weatherCodeToDescription(code)}
-              />
-            );
-          }
-          return null;
-        })()}
-        <Text style={styles.modalTitle}>Date: {selectedDate}</Text>
-      </View>
-
       <Calendar
         onDayPress={onDayPress}
         markedDates={{
@@ -763,18 +743,20 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingTop: 50,
     paddingHorizontal: 10,
+    backgroundColor: '#ffffff',
   },
   header: {
     textAlign: 'center',
     fontSize: 20,
     marginBottom: 6,
     fontWeight: 'bold',
+    color: '#000000',
   },
   subHeader: {
     textAlign: 'center',
     fontSize: 14,
     marginBottom: 12,
-    color: '#333',
+    color: '#333333',
   },
   regionRow: {
     flexDirection: 'row',
@@ -876,5 +858,15 @@ const styles = StyleSheet.create({
   },
   dropdownItemText: {
     fontSize: 16,
+    color: '#000000',
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#cccccc',
+    borderRadius: 6,
+    padding: 10,
+    fontSize: 15,
+    backgroundColor: '#ffffff',
+    color: '#000000',
   },
 });
