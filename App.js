@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -32,107 +32,14 @@ import axios from 'axios';
 import * as Location from 'expo-location';
 import { predictDisease } from './model/predict';
 import { getOutbreaks } from './services/outbreakService';
-import { OUTBREAK_API_URL } from './config';
 
 const PREVENTION_BY_DISEASE = {
-  // ── Model-predicted diseases ──────────────────────────────────────────────
-  'Dengue':
-    '• Use mosquito repellent (DEET-based) on exposed skin.\n' +
-    '• Wear long-sleeved clothing, especially during dawn and dusk.\n' +
-    '• Eliminate standing water in containers, flower pots, and tyres.\n' +
-    '• Sleep under mosquito nets.\n' +
-    '• Seek medical attention immediately if you develop sudden high fever.',
-
-  'Malaria':
-    '• Sleep under insecticide-treated bed nets every night.\n' +
-    '• Apply mosquito repellent on skin and clothing.\n' +
-    '• Take antimalarial medication if prescribed or travelling to endemic areas.\n' +
-    '• Wear long sleeves and trousers after sunset.\n' +
-    '• Remove stagnant water sources near your home.',
-
-  'Influenza':
-    '• Get the annual influenza vaccine before flu season.\n' +
-    '• Wash hands frequently with soap and water for at least 20 seconds.\n' +
-    '• Avoid touching your face with unwashed hands.\n' +
-    '• Stay home and rest if you feel unwell to avoid spreading it.\n' +
-    '• Wear a mask in crowded or enclosed spaces during outbreaks.',
-
-  'Heat Stroke':
-    '• Drink at least 2–3 litres of water daily; more during physical activity.\n' +
-    '• Avoid outdoor activity between 11 am and 3 pm on hot days.\n' +
-    '• Wear light-coloured, loose-fitting, breathable clothing.\n' +
-    '• Use fans, air conditioning, or cool damp cloths to lower body temperature.\n' +
-    '• Never leave children or elderly persons in parked vehicles.',
-
-  'Common Cold':
-    '• Wash hands often and avoid touching your eyes, nose, and mouth.\n' +
-    '• Stay well-hydrated and get adequate sleep to support immunity.\n' +
-    '• Use a tissue or elbow when sneezing or coughing; dispose of tissues immediately.\n' +
-    '• Avoid close contact with people who have cold symptoms.\n' +
-    '• Keep indoor spaces well-ventilated.',
-
-  'Heart Attack':
-    '• Maintain a heart-healthy diet: reduce saturated fat, salt, and processed foods.\n' +
-    '• Exercise for at least 30 minutes on most days of the week.\n' +
-    '• Do not smoke, and limit alcohol intake.\n' +
-    '• Monitor and control blood pressure, cholesterol, and blood sugar regularly.\n' +
-    '• Know the warning signs: chest pain, shortness of breath, pain radiating to the arm or jaw — call emergency services immediately.',
-
-  'Stroke':
-    '• Control high blood pressure — the leading cause of stroke.\n' +
-    '• Maintain a healthy weight and eat a balanced, low-salt diet.\n' +
-    '• Exercise regularly and do not smoke.\n' +
-    '• Manage diabetes and cholesterol with medical guidance.\n' +
-    '• Act FAST: Face drooping, Arm weakness, Speech difficulty → call emergency services immediately.',
-
-  'Migraine':
-    '• Identify and avoid personal triggers: bright lights, strong smells, stress, or certain foods.\n' +
-    '• Maintain a consistent sleep schedule — irregular sleep is a common trigger.\n' +
-    '• Stay well-hydrated and do not skip meals.\n' +
-    '• Manage stress through relaxation techniques such as yoga or meditation.\n' +
-    '• Take prescribed medication at the earliest sign of an attack.',
-
-  'Arthritis':
-    '• Stay physically active with low-impact exercises: swimming, walking, or cycling.\n' +
-    '• Maintain a healthy weight to reduce stress on joints.\n' +
-    '• Apply heat to stiff joints and cold packs to swollen or inflamed joints.\n' +
-    '• Follow prescribed medication and physiotherapy plans consistently.\n' +
-    '• Protect joints during daily activities; use supportive footwear.',
-
-  'Eczema':
-    '• Moisturise skin at least twice daily with fragrance-free creams or ointments.\n' +
-    '• Identify and avoid triggers: soaps, detergents, dust mites, pet dander, or certain fabrics.\n' +
-    '• Wear soft, breathable cotton clothing; avoid wool or synthetic fabrics.\n' +
-    '• Keep fingernails short to prevent skin damage from scratching.\n' +
-    '• Use prescribed topical corticosteroids or immunomodulators as directed.',
-
-  'Sinusitis':
-    '• Use saline nasal rinses (neti pot or spray) daily to keep nasal passages clear.\n' +
-    '• Stay well-hydrated to thin mucus secretions.\n' +
-    '• Apply a warm damp cloth over the nose and forehead to relieve pressure.\n' +
-    '• Use a humidifier in dry environments.\n' +
-    '• Consult a doctor if symptoms persist beyond 10 days or worsen suddenly.',
-
-  // ── Legacy keys (rule-based fallback predictions) ─────────────────────────
-  'Flu':
-    '• Get the annual flu vaccine before flu season.\n' +
-    '• Wash hands frequently and avoid close contact with sick individuals.\n' +
-    '• Rest and stay hydrated until symptoms resolve.\n' +
-    '• Wear a mask in crowded spaces during flu outbreaks.',
-
-  'Hypothermia':
-    '• Dress in warm, waterproof layers and cover extremities in cold weather.\n' +
-    '• Stay dry — wet clothing greatly increases heat loss.\n' +
-    '• Avoid prolonged exposure to cold, wind, or rain.\n' +
-    '• Carry emergency thermal blankets when hiking or in cold environments.\n' +
-    '• Recognise early signs: shivering, confusion, slurred speech — seek warm shelter immediately.',
-
-  'Respiratory Issues':
-    '• Avoid outdoor activity on high-pollution or high-pollen days.\n' +
-    '• Wear an N95 mask in smoky or dusty environments.\n' +
-    '• Keep indoor air clean with air purifiers and regular ventilation.\n' +
-    '• Follow prescribed inhalers or medications consistently.\n' +
-    '• Quit smoking and avoid second-hand smoke.',
+  'Heat Stroke': 'Stay hydrated, avoid direct sun exposure, and take breaks in the shade.',
+  Dengue: 'Avoid stagnant water, use mosquito repellent, and keep surroundings clean.',
+  'Common Cold': 'Rest, drink plenty of fluids, and maintain good hygiene.',
+  Hypothermia: 'Dress warmly, stay dry, and avoid prolonged exposure to cold.',
+  Flu: 'Get vaccinated, wash hands often, and avoid close contact with sick people.',
+  Malaria: 'Use mosquito nets, take antimalarial medication as advised, and avoid mosquito bites.',
 };
 
 const SYMPTOMS = [
@@ -303,7 +210,6 @@ export default function App() {
   const [forecastData, setForecastData] = useState(null);
   const [regionDropdownVisible, setRegionDropdownVisible] = useState(false);
   const [gpsRegion, setGpsRegion] = useState(null);
-  const pendingSuggestionRef = useRef(null);
 
   const [user, setUser] = useState(null);
   const [showLogin, setShowLogin] = useState(false);
@@ -370,13 +276,10 @@ export default function App() {
         const storedSymptoms = await AsyncStorage.getItem('userSymptoms');
 
         if (storedUser) {
-          const parsed = JSON.parse(storedUser);
-          setNameInput(parsed.name || '');
-          setAgeInput(parsed.age ? String(parsed.age) : '');
-          setGenderInput(parsed.gender || '');
+          setUser(JSON.parse(storedUser));
+        } else {
+          setShowLogin(true);
         }
-        // Always require login on every app launch
-        setShowLogin(true);
 
         if (storedSymptoms) {
           setSelectedSymptoms(JSON.parse(storedSymptoms));
@@ -432,7 +335,7 @@ export default function App() {
 
     const fetchOutbreaks = async () => {
       try {
-        const backendUrl = `${OUTBREAK_API_URL}/api/outbreaks?region=${encodeURIComponent(effectiveRegion)}`;
+        const backendUrl = `http://localhost:3000/api/outbreaks?region=${encodeURIComponent(effectiveRegion)}`;
         const response = await fetch(backendUrl);
         if (response.ok) {
           const { outbreaks: list } = await response.json();
@@ -453,7 +356,7 @@ export default function App() {
     setRegionLabel(effectiveLabel);
   }, [regionKey, gpsRegion]);
 
-  const onDayPress = async (day) => {
+  const onDayPress = (day) => {
     setSelectedDate(day.dateString);
     setModalVisible(true);
     setLoading(true);
@@ -485,7 +388,7 @@ export default function App() {
           humidity,
         });
 
-        const diseaseList = await predictDisease({
+        const diseaseList = predictDisease({
           tempMax,
           tempMin,
           weatherCode,
@@ -616,45 +519,30 @@ export default function App() {
           }}
           onFocus={() => setRegionDropdownVisible(regionInput.length > 0)}
           onBlur={() => {
-            setTimeout(() => {
-              // If user tapped a suggestion, apply it and skip text normalization
-              if (pendingSuggestionRef.current) {
-                const opt = pendingSuggestionRef.current;
-                pendingSuggestionRef.current = null;
-                setRegionInput(opt.label);
-                setRegionKey(opt.value);
-                setRegionLabel(opt.label);
-                setGpsRegion(null);
-                setRegionDropdownVisible(false);
-                return;
-              }
-              setRegionDropdownVisible(false);
-              setRegionInput(current => {
-                const text = (current || '').trim();
-                if (!text) return current;
-                let found = REGION_OPTIONS.find(opt => opt.label.toLowerCase() === text.toLowerCase() || opt.value === text.toLowerCase());
-                if (!found) {
-                  const normalized = REGION_CODE_MAP[text.toLowerCase()] || text.toLowerCase();
-                  found = REGION_OPTIONS.find(opt => opt.value === normalized);
-                  if (found) {
-                    setRegionKey(found.value);
-                    setRegionLabel(found.label);
-                    setGpsRegion(null);
-                    return found.label;
-                  } else {
-                    setRegionKey(normalized);
-                    setRegionLabel(text);
-                    setGpsRegion(null);
-                    return text;
-                  }
-                } else {
+            setTimeout(() => setRegionDropdownVisible(false), 200);
+            if (regionInput.trim()) {
+              let found = REGION_OPTIONS.find(opt => opt.label.toLowerCase() === regionInput.trim().toLowerCase() || opt.value === regionInput.trim().toLowerCase());
+              if (!found) {
+                const normalized = REGION_CODE_MAP[regionInput.trim().toLowerCase()] || regionInput.trim().toLowerCase();
+                found = REGION_OPTIONS.find(opt => opt.value === normalized);
+                if (found) {
                   setRegionKey(found.value);
                   setRegionLabel(found.label);
+                  setRegionInput(found.label); // Always set input to full label
                   setGpsRegion(null);
-                  return found.label;
+                } else {
+                  setRegionKey(normalized);
+                  setRegionLabel(regionInput.trim());
+                  setRegionInput(regionInput.trim());
+                  setGpsRegion(null);
                 }
-              });
-            }, 300);
+              } else {
+                setRegionKey(found.value);
+                setRegionLabel(found.label);
+                setRegionInput(found.label); // Always set input to full label
+                setGpsRegion(null);
+              }
+            }
           }}
           onSubmitEditing={() => {
             if (regionInput.trim()) {
@@ -690,11 +578,8 @@ export default function App() {
                 <Pressable
                   key={option.value}
                   style={styles.dropdownItem}
-                  onPressIn={() => {
-                    pendingSuggestionRef.current = option;
-                  }}
                   onPress={() => {
-                    pendingSuggestionRef.current = null;
+                    // Always set all fields to the selected region
                     setRegionInput(option.label);
                     setRegionKey(option.value);
                     setRegionLabel(option.label);

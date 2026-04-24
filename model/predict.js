@@ -1,9 +1,22 @@
-import { PREDICT_API_URL } from '../config';
+import model from './tree_model.json';
 
-const PREDICT_BASE_URL = PREDICT_API_URL;
+function traverse(node, features) {
+  if (!node || node.type === 'leaf') {
+    return node ? node.prediction : null;
+  }
+
+  const value = features[node.feature];
+  if (value == null || Number.isNaN(value)) return null;
+
+  if (value <= node.threshold) {
+    return traverse(node.left, features);
+  }
+  return traverse(node.right, features);
+}
 
 /**
  * Predicts diseases from weather + user symptom features.
+ * Returns multiple possible diseases based on weather conditions and symptoms.
  *
  * @param {{
  *   tempMax: number,
@@ -14,9 +27,9 @@ const PREDICT_BASE_URL = PREDICT_API_URL;
  *   gender?: string,
  *   symptoms?: Record<string, boolean>
  * }} features
- * @returns {Promise<string[]>} Ordered array of predicted disease names
+ * @returns {string[]} Array of predicted diseases
  */
-export async function predictDisease({
+export function predictDisease({
   tempMax,
   tempMin,
   weatherCode,
@@ -25,69 +38,78 @@ export async function predictDisease({
   gender,
   symptoms,
 }) {
-  const genderMap = { male: 1, female: 0, other: 0 };
+  const genderMap = {
+    male: 0,
+    female: 1,
+    other: 2,
+  };
 
-  // Field names must match the normalised column names from the training dataset
-  const payload = {
-    age: age == null ? 0 : Number(age),
-    gender: gender == null ? 0 : (genderMap[gender.toString().toLowerCase()] ?? 0),
-    temperature_c: tempMax != null && tempMin != null
-      ? (Number(tempMax) + Number(tempMin)) / 2
-      : Number(tempMax ?? tempMin ?? 25),
+  const normalized = {
+    temp_max: Number(tempMax),
+    temp_min: Number(tempMin),
+    weathercode: Number(weatherCode),
     humidity: humidity == null ? 0 : Number(humidity),
-    wind_speed_km_h: 0,
+    age: age == null ? 0 : Number(age),
+    gender: gender == null ? 0 : genderMap[gender.toString().toLowerCase()] ?? 0,
   };
 
   if (symptoms) {
     Object.entries(symptoms).forEach(([key, value]) => {
-      payload[key] = value ? 1 : 0;
+      normalized[key] = value ? 1 : 0;
     });
   }
 
-  try {
-    const response = await fetch(`${PREDICT_BASE_URL}/predict`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Prediction API responded with status ${response.status}`);
-    }
-
-    const { predictions } = await response.json();
-    return predictions.map((p) => p.disease);
-  } catch (error) {
-    console.warn('Prediction API unavailable, falling back to rule-based prediction.', error);
-    return fallbackPredict({ tempMax, tempMin, weatherCode, humidity });
-  }
-}
-
-/**
- * Rule-based fallback used when the prediction API is unreachable.
- */
-function fallbackPredict({ tempMax, tempMin, weatherCode, humidity }) {
   const predictions = [];
+  
+  // Get the primary prediction from the tree
+  const primaryPrediction = traverse(model.tree, normalized);
+  if (primaryPrediction) {
+    predictions.push(primaryPrediction);
+  }
+
+  // Add secondary predictions based on weather conditions
   const tempAvg = (tempMax + tempMin) / 2;
 
+  // High temperature risk
   if (tempAvg > 35) {
-    predictions.push('Heat Stroke');
-    if (humidity > 60) predictions.push('Dengue');
+    if (!predictions.includes('Heat Stroke')) predictions.push('Heat Stroke');
+    if (!predictions.includes('Dengue') && humidity > 60) predictions.push('Dengue');
   }
+
+  // Moderate-high temperature with humidity (mosquito-borne diseases)
   if (tempAvg > 25 && humidity > 65) {
     if (!predictions.includes('Dengue')) predictions.push('Dengue');
-    predictions.push('Malaria');
+    if (!predictions.includes('Malaria')) predictions.push('Malaria');
   }
+
+  // Low temperature risk
   if (tempAvg < 10) {
-    predictions.push('Hypothermia');
-    predictions.push('Flu');
+    if (!predictions.includes('Hypothermia')) predictions.push('Hypothermia');
+    if (!predictions.includes('Flu')) predictions.push('Flu');
   }
+
+  // Rainy weather (weather codes 51-82)
   if (weatherCode >= 51 && weatherCode <= 82) {
-    predictions.push('Common Cold');
-    if (tempAvg < 20 && !predictions.includes('Flu')) predictions.push('Flu');
+    if (!predictions.includes('Common Cold')) predictions.push('Common Cold');
+    if (!predictions.includes('Flu') && tempAvg < 20) predictions.push('Flu');
   }
+
+  // Fog or low visibility
   if (weatherCode === 45 || weatherCode === 48) {
-    predictions.push('Respiratory Issues');
+    if (!predictions.includes('Respiratory Issues')) predictions.push('Respiratory Issues');
+  }
+
+  // If user reports high fever or specific symptoms
+  const hasFever = symptoms?.high_fever || symptoms?.fever;
+  const hasRespiratory = symptoms?.cough || symptoms?.runny_nose || symptoms?.sore_throat;
+  const hasJointPain = symptoms?.joint_pain || symptoms?.body_aches;
+
+  if (hasFever && hasJointPain && !predictions.includes('Dengue')) {
+    predictions.push('Dengue');
+  }
+
+  if (hasRespiratory && tempAvg < 20 && !predictions.includes('Flu')) {
+    predictions.push('Flu');
   }
 
   return predictions.length > 0 ? predictions : ['No disease predicted'];
