@@ -210,6 +210,7 @@ export default function App() {
   const [forecastData, setForecastData] = useState(null);
   const [regionDropdownVisible, setRegionDropdownVisible] = useState(false);
   const [gpsRegion, setGpsRegion] = useState(null);
+  const pendingSuggestionRef = useRef(null);
 
   const [user, setUser] = useState(null);
   const [showLogin, setShowLogin] = useState(false);
@@ -519,30 +520,43 @@ export default function App() {
           }}
           onFocus={() => setRegionDropdownVisible(regionInput.length > 0)}
           onBlur={() => {
-            setTimeout(() => setRegionDropdownVisible(false), 200);
-            if (regionInput.trim()) {
-              let found = REGION_OPTIONS.find(opt => opt.label.toLowerCase() === regionInput.trim().toLowerCase() || opt.value === regionInput.trim().toLowerCase());
-              if (!found) {
-                const normalized = REGION_CODE_MAP[regionInput.trim().toLowerCase()] || regionInput.trim().toLowerCase();
-                found = REGION_OPTIONS.find(opt => opt.value === normalized);
-                if (found) {
+            setTimeout(() => {
+              // If user tapped a suggestion, apply it and skip text normalization
+              if (pendingSuggestionRef.current) {
+                const opt = pendingSuggestionRef.current;
+                pendingSuggestionRef.current = null;
+                setRegionInput(opt.label);
+                setRegionKey(opt.value);
+                setRegionLabel(opt.label);
+                setGpsRegion(null);
+                setRegionDropdownVisible(false);
+                return;
+              }
+              setRegionDropdownVisible(false);
+              if (regionInput.trim()) {
+                let found = REGION_OPTIONS.find(opt => opt.label.toLowerCase() === regionInput.trim().toLowerCase() || opt.value === regionInput.trim().toLowerCase());
+                if (!found) {
+                  const normalized = REGION_CODE_MAP[regionInput.trim().toLowerCase()] || regionInput.trim().toLowerCase();
+                  found = REGION_OPTIONS.find(opt => opt.value === normalized);
+                  if (found) {
+                    setRegionKey(found.value);
+                    setRegionLabel(found.label);
+                    setRegionInput(found.label);
+                    setGpsRegion(null);
+                  } else {
+                    setRegionKey(normalized);
+                    setRegionLabel(regionInput.trim());
+                    setRegionInput(regionInput.trim());
+                    setGpsRegion(null);
+                  }
+                } else {
                   setRegionKey(found.value);
                   setRegionLabel(found.label);
-                  setRegionInput(found.label); // Always set input to full label
-                  setGpsRegion(null);
-                } else {
-                  setRegionKey(normalized);
-                  setRegionLabel(regionInput.trim());
-                  setRegionInput(regionInput.trim());
+                  setRegionInput(found.label);
                   setGpsRegion(null);
                 }
-              } else {
-                setRegionKey(found.value);
-                setRegionLabel(found.label);
-                setRegionInput(found.label); // Always set input to full label
-                setGpsRegion(null);
               }
-            }
+            }, 300);
           }}
           onSubmitEditing={() => {
             if (regionInput.trim()) {
@@ -578,8 +592,11 @@ export default function App() {
                 <Pressable
                   key={option.value}
                   style={styles.dropdownItem}
+                  onPressIn={() => {
+                    pendingSuggestionRef.current = option;
+                  }}
                   onPress={() => {
-                    // Always set all fields to the selected region
+                    pendingSuggestionRef.current = null;
                     setRegionInput(option.label);
                     setRegionKey(option.value);
                     setRegionLabel(option.label);
