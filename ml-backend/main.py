@@ -1,12 +1,39 @@
 import os
 import pickle
 import numpy as np
-from fastapi import FastAPI
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 
-app = FastAPI()
+MODEL_DIR = os.path.join(os.path.dirname(__file__), '..', 'model')
+
+state = {"xgb_model": None, "feature_list": None, "label_encoder": None, "error": None}
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Load models after the port binds so Render detects the service as alive
+    try:
+        import xgboost, sklearn
+        print(f"Loading models — xgboost={xgboost.__version__} sklearn={sklearn.__version__} numpy={np.__version__}")
+        with open(os.path.join(MODEL_DIR, 'xgb_model.pkl'), 'rb') as f:
+            state["xgb_model"] = pickle.load(f)
+        with open(os.path.join(MODEL_DIR, 'feature_list.pkl'), 'rb') as f:
+            state["feature_list"] = pickle.load(f)
+        with open(os.path.join(MODEL_DIR, 'label_encoder.pkl'), 'rb') as f:
+            state["label_encoder"] = pickle.load(f)
+        print(f"Models loaded OK. Features: {len(state['feature_list'])}, Classes: {list(state['label_encoder'].classes_)}")
+    except Exception as e:
+        import traceback
+        state["error"] = str(e)
+        print("MODEL LOAD ERROR:", e)
+        traceback.print_exc()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -14,26 +41,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-MODEL_DIR = os.path.join(os.path.dirname(__file__), '..', 'model')
-
-try:
-    import xgboost
-    import sklearn
-    import numpy
-    print(f"xgboost={xgboost.__version__} sklearn={sklearn.__version__} numpy={numpy.__version__}")
-    with open(os.path.join(MODEL_DIR, 'xgb_model.pkl'), 'rb') as f:
-        xgb_model = pickle.load(f)
-    with open(os.path.join(MODEL_DIR, 'feature_list.pkl'), 'rb') as f:
-        FEATURE_LIST = pickle.load(f)
-    with open(os.path.join(MODEL_DIR, 'label_encoder.pkl'), 'rb') as f:
-        label_encoder = pickle.load(f)
-    print(f"Models loaded OK. Features: {len(FEATURE_LIST)}, Classes: {list(label_encoder.classes_)}")
-except Exception as e:
-    import traceback
-    print("STARTUP ERROR:", e)
-    traceback.print_exc()
-    raise
 
 
 class PredictRequest(BaseModel):
@@ -91,19 +98,23 @@ class PredictRequest(BaseModel):
 
 @app.post("/predict")
 def predict(req: PredictRequest):
+    if state["error"]:
+        raise HTTPException(status_code=503, detail=f"Model load failed: {state['error']}")
+    if not state["xgb_model"]:
+        raise HTTPException(status_code=503, detail="Models not loaded yet")
+
     data = req.model_dump()
-    # pain_behind_eyes is a duplicate key in the training data
     data['pain_behind_eyes'] = data.get('pain_behind_the_eyes', 0)
 
-    X = np.array([[data.get(f, 0) or 0 for f in FEATURE_LIST]])
+    X = np.array([[data.get(f, 0) or 0 for f in state["feature_list"]]])
 
-    proba = xgb_model.predict_proba(X)[0]
+    proba = state["xgb_model"].predict_proba(X)[0]
 
     THRESHOLD = 0.15
     predictions = []
     for i, prob in enumerate(proba):
         if prob >= THRESHOLD:
-            disease = label_encoder.inverse_transform([i])[0]
+            disease = state["label_encoder"].inverse_transform([i])[0]
             predictions.append({"disease": disease, "confidence": round(float(prob), 3)})
 
     predictions.sort(key=lambda x: x["confidence"], reverse=True)
@@ -112,4 +123,8 @@ def predict(req: PredictRequest):
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {
+        "status": "ok" if state["xgb_model"] else "degraded",
+        "models_loaded": state["xgb_model"] is not None,
+        "error": state["error"],
+    }
