@@ -17,12 +17,23 @@ app.add_middleware(
 
 MODEL_DIR = os.path.join(os.path.dirname(__file__), '..', 'model')
 
-with open(os.path.join(MODEL_DIR, 'xgb_model.pkl'), 'rb') as f:
-    xgb_model = pickle.load(f)
-with open(os.path.join(MODEL_DIR, 'feature_list.pkl'), 'rb') as f:
-    FEATURE_LIST = pickle.load(f)
-with open(os.path.join(MODEL_DIR, 'label_encoder.pkl'), 'rb') as f:
-    label_encoder = pickle.load(f)
+try:
+    import xgboost
+    import sklearn
+    import numpy
+    print(f"xgboost={xgboost.__version__} sklearn={sklearn.__version__} numpy={numpy.__version__}")
+    with open(os.path.join(MODEL_DIR, 'xgb_model.pkl'), 'rb') as f:
+        xgb_model = pickle.load(f)
+    with open(os.path.join(MODEL_DIR, 'feature_list.pkl'), 'rb') as f:
+        FEATURE_LIST = pickle.load(f)
+    with open(os.path.join(MODEL_DIR, 'label_encoder.pkl'), 'rb') as f:
+        label_encoder = pickle.load(f)
+    print(f"Models loaded OK. Features: {len(FEATURE_LIST)}, Classes: {list(label_encoder.classes_)}")
+except Exception as e:
+    import traceback
+    print("STARTUP ERROR:", e)
+    traceback.print_exc()
+    raise
 
 
 class PredictRequest(BaseModel):
