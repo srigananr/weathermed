@@ -9,7 +9,7 @@ from typing import Optional
 
 MODEL_DIR = os.path.join(os.path.dirname(__file__), '..', 'model')
 
-state = {"xgb_model": None, "feature_list": None, "label_encoder": None, "error": None}
+state = {"xgb_model": None, "feature_list": None, "classes": None, "error": None}
 
 
 @asynccontextmanager
@@ -22,9 +22,9 @@ async def lifespan(app: FastAPI):
             state["xgb_model"] = pickle.load(f)
         with open(os.path.join(MODEL_DIR, 'feature_list.pkl'), 'rb') as f:
             state["feature_list"] = pickle.load(f)
-        with open(os.path.join(MODEL_DIR, 'label_encoder.pkl'), 'rb') as f:
-            state["label_encoder"] = pickle.load(f)
-        print(f"Models loaded OK. Features: {len(state['feature_list'])}, Classes: {list(state['label_encoder'].classes_)}")
+        # Class names come directly from the classifier — no label_encoder.pkl needed
+        state["classes"] = list(state["xgb_model"].classes_)
+        print(f"Models loaded OK. Features: {len(state['feature_list'])}, Classes: {state['classes']}")
     except Exception as e:
         import traceback
         state["error"] = str(e)
@@ -114,7 +114,7 @@ def predict(req: PredictRequest):
     predictions = []
     for i, prob in enumerate(proba):
         if prob >= THRESHOLD:
-            disease = state["label_encoder"].inverse_transform([i])[0]
+            disease = state["classes"][i]
             predictions.append({"disease": disease, "confidence": round(float(prob), 3)})
 
     predictions.sort(key=lambda x: x["confidence"], reverse=True)
@@ -125,6 +125,6 @@ def predict(req: PredictRequest):
 def health():
     return {
         "status": "ok" if state["xgb_model"] else "degraded",
-        "models_loaded": state["xgb_model"] is not None,
+        "models_loaded": state["xgb_model"] is not None and state["classes"] is not None,
         "error": state["error"],
     }
