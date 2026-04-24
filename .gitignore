@@ -43,8 +43,5 @@ __pycache__/
 venv/
 .venv/
 
-# Trained model files (large binaries - regenerate with train_model.py)
-model/*.pkl
-
 # Logs
 *.log
