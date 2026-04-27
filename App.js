@@ -337,19 +337,23 @@ export default function App() {
 
     const fetchOutbreaks = async () => {
       try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
         const backendUrl = `${OUTBREAK_API_URL}/api/outbreaks?region=${encodeURIComponent(effectiveRegion)}`;
-        const response = await fetch(backendUrl);
+        const response = await fetch(backendUrl, { signal: controller.signal });
+        clearTimeout(timeout);
         if (response.ok) {
           const { outbreaks: list } = await response.json();
-          setOutbreaks(list);
+          setOutbreaks(list || []);
           return;
         }
       } catch {}
       try {
         const list = await getOutbreaks(effectiveRegion);
-        setOutbreaks(list);
+        setOutbreaks(list || []);
       } catch (error) {
         console.warn('Failed to load outbreak data.', error);
+        setOutbreaks([]);
       }
     };
 
@@ -466,31 +470,34 @@ export default function App() {
   if (showLogin) {
     return (
       <View style={styles.container}>
-        <Text style={styles.header}>Welcome</Text>
-        <Text style={styles.subHeader}>Please enter your details to continue</Text>
+        <Text style={styles.header}>Welcome to WeatherMed</Text>
+        <Text style={styles.subHeader}>Enter your details to get personalised disease predictions</Text>
 
+        <Text style={styles.inputLabel}>Name</Text>
         <TextInput
           style={styles.input}
-          placeholder="Name"
+          placeholder="e.g. Sriganan"
           value={nameInput}
           onChangeText={setNameInput}
         />
+        <Text style={styles.inputLabel}>Age</Text>
         <TextInput
           style={styles.input}
-          placeholder="Age"
+          placeholder="e.g. 22"
           value={ageInput}
           onChangeText={setAgeInput}
           keyboardType="numeric"
         />
+        <Text style={styles.inputLabel}>Gender</Text>
         <TextInput
           style={styles.input}
-          placeholder="Gender (male/female/other)"
+          placeholder="male / female / other"
           value={genderInput}
           onChangeText={setGenderInput}
         />
 
         <Pressable
-          style={styles.button}
+          style={[styles.button, { marginTop: 20 }]}
           onPress={() => {
             const profile = {
               name: nameInput.trim() || 'Anonymous',
@@ -595,16 +602,12 @@ export default function App() {
         />
         {regionDropdownVisible && filteredRegionOptions.length > 0 && (
           <View style={styles.dropdown}>
-            <ScrollView style={{ maxHeight: 200 }}>
+            <ScrollView style={{ maxHeight: 200 }} keyboardShouldPersistTaps="always">
               {filteredRegionOptions.map((option) => (
                 <Pressable
                   key={option.value}
                   style={styles.dropdownItem}
-                  onPressIn={() => {
-                    pendingSuggestionRef.current = option;
-                  }}
                   onPress={() => {
-                    pendingSuggestionRef.current = null;
                     setRegionInput(option.label);
                     setRegionKey(option.value);
                     setRegionLabel(option.label);
@@ -656,6 +659,20 @@ export default function App() {
       >
         <View style={styles.modalView}>
           <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}>
+            {forecastData && selectedDate && (() => {
+              const idx = forecastData.daily?.time?.findIndex(d => d === selectedDate);
+              if (idx !== -1 && idx !== undefined) {
+                const code = forecastData.daily.weathercode[idx];
+                return (
+                  <Image
+                    source={{ uri: weatherCodeToIcon(code) }}
+                    style={{ width: 72, height: 72, alignSelf: 'center', marginBottom: 8 }}
+                    resizeMode="contain"
+                  />
+                );
+              }
+              return null;
+            })()}
             <Text style={styles.modalTitle}>Date: {selectedDate}</Text>
 
             {loading ? (
@@ -691,21 +708,18 @@ export default function App() {
                   <Text style={styles.modalText}>No disease predicted</Text>
                 )}
 
-                {outbreaks.length > 0 && (
-                  <View style={{ marginTop: 14 }}>
-                    <Text style={[styles.modalText, { fontWeight: 'bold' }]}>Active Outbreak Alerts</Text>
-                    {outbreaks.map((o) => (
-                      <View key={o.id} style={{ marginTop: 8 }}>
-                        <Text style={[styles.modalText, { fontWeight: 'bold' }]}>{o.name}</Text>
-                        {o.notes ? <Text style={styles.modalText}>{o.notes}</Text> : null}
-                        <Text style={styles.modalText}>Prevention: {o.prevention}</Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
-                {outbreaks.source ? (
-                  <Text style={[styles.modalText, { marginTop: 12, fontStyle: 'italic' }]}>Data source: {outbreaks.source}</Text>
-                ) : null}
+                <View style={{ marginTop: 14 }}>
+                  <Text style={[styles.modalText, { fontWeight: 'bold' }]}>Outbreak Alerts</Text>
+                  {outbreaks.length > 0 ? outbreaks.map((o) => (
+                    <View key={o.id} style={{ marginTop: 8, padding: 8, backgroundColor: '#fff3f3', borderRadius: 6 }}>
+                      <Text style={[styles.modalText, { fontWeight: 'bold', color: '#c0392b' }]}>{o.name}</Text>
+                      {o.notes ? <Text style={[styles.modalText, { fontSize: 13 }]}>{o.notes}</Text> : null}
+                      <Text style={[styles.modalText, { fontSize: 13 }]}>Prevention: {o.prevention}</Text>
+                    </View>
+                  )) : (
+                    <Text style={[styles.modalText, { color: '#888', fontStyle: 'italic' }]}>No active outbreak alerts for this region</Text>
+                  )}
+                </View>
               </>
             )}
 
@@ -896,5 +910,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     backgroundColor: '#ffffff',
     color: '#000000',
+    marginBottom: 12,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333333',
+    marginBottom: 4,
+    marginLeft: 2,
   },
 });
