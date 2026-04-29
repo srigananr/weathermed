@@ -164,9 +164,11 @@ export default function App() {
       // Sound playback is best-effort; never crash the app
     }
   }, [bannerAnim]);
-  const [regionKey, setRegionKey] = useState('chennai');
-  const [regionLabel, setRegionLabel] = useState('Chennai');
-  const [regionInput, setRegionInput] = useState('chennai');
+  const [regionLabel, setRegionLabel] = useState('Vellore, Tamil Nadu, India');
+  const [regionInput, setRegionInput] = useState('Vellore');
+  const [regionCoords, setRegionCoords] = useState({ latitude: 12.9165, longitude: 79.1325 });
+  const [regionCountryCode, setRegionCountryCode] = useState('in');
+  const [gpsDetected, setGpsDetected] = useState(false);
   const [locationStatus, setLocationStatus] = useState('unknown');
 
   // All Indian states (abbreviated for brevity, add more as needed)
@@ -206,79 +208,54 @@ export default function App() {
 
   // All countries (abbreviated for brevity, add more as needed)
   const COUNTRIES = [
-    { label: 'India', value: 'in', latitude: 20.5937, longitude: 78.9629 },
-    { label: 'United States', value: 'us', latitude: 37.0902, longitude: -95.7129 },
-    { label: 'United Kingdom', value: 'uk', latitude: 51.509865, longitude: -0.118092 },
-    { label: 'Australia', value: 'au', latitude: -25.2744, longitude: 133.7751 },
-    { label: 'Singapore', value: 'sg', latitude: 1.3521, longitude: 103.8198 },
-    { label: 'Canada', value: 'ca', latitude: 56.1304, longitude: -106.3468 },
-    { label: 'France', value: 'fr', latitude: 46.6034, longitude: 1.8883 },
-    { label: 'Germany', value: 'de', latitude: 51.1657, longitude: 10.4515 },
-    { label: 'Japan', value: 'jp', latitude: 36.2048, longitude: 138.2529 },
-    { label: 'China', value: 'cn', latitude: 35.8617, longitude: 104.1954 },
-    { label: 'Brazil', value: 'br', latitude: -14.235, longitude: -51.9253 },
-    { label: 'South Africa', value: 'za', latitude: -30.5595, longitude: 22.9375 },
-    { label: 'Russia', value: 'ru', latitude: 61.524, longitude: 105.3188 },
-    { label: 'Bangladesh', value: 'bd', latitude: 23.685, longitude: 90.3563 },
-    { label: 'Pakistan', value: 'pk', latitude: 30.3753, longitude: 69.3451 },
-    { label: 'Nepal', value: 'np', latitude: 28.3949, longitude: 84.124 },
-    { label: 'Sri Lanka', value: 'lk', latitude: 7.8731, longitude: 80.7718 },
-    { label: 'Afghanistan', value: 'af', latitude: 33.9391, longitude: 67.71 },
-    { label: 'United Arab Emirates', value: 'ae', latitude: 23.4241, longitude: 53.8478 },
-    { label: 'Saudi Arabia', value: 'sa', latitude: 23.8859, longitude: 45.0792 },
-    // ...add more countries as needed
+    { label: 'India', value: 'in', countryCode: 'in', latitude: 20.5937, longitude: 78.9629 },
+    { label: 'United States', value: 'us', countryCode: 'us', latitude: 37.0902, longitude: -95.7129 },
+    { label: 'United Kingdom', value: 'gb', countryCode: 'gb', latitude: 51.509865, longitude: -0.118092 },
+    { label: 'Australia', value: 'au', countryCode: 'au', latitude: -25.2744, longitude: 133.7751 },
+    { label: 'Singapore', value: 'sg', countryCode: 'sg', latitude: 1.3521, longitude: 103.8198 },
+    { label: 'Canada', value: 'ca', countryCode: 'ca', latitude: 56.1304, longitude: -106.3468 },
+    { label: 'France', value: 'fr', countryCode: 'fr', latitude: 46.6034, longitude: 1.8883 },
+    { label: 'Germany', value: 'de', countryCode: 'de', latitude: 51.1657, longitude: 10.4515 },
+    { label: 'Japan', value: 'jp', countryCode: 'jp', latitude: 36.2048, longitude: 138.2529 },
+    { label: 'China', value: 'cn', countryCode: 'cn', latitude: 35.8617, longitude: 104.1954 },
+    { label: 'Brazil', value: 'br', countryCode: 'br', latitude: -14.235, longitude: -51.9253 },
+    { label: 'South Africa', value: 'za', countryCode: 'za', latitude: -30.5595, longitude: 22.9375 },
+    { label: 'Nigeria', value: 'ng', countryCode: 'ng', latitude: 9.082, longitude: 8.6753 },
+    { label: 'Russia', value: 'ru', countryCode: 'ru', latitude: 61.524, longitude: 105.3188 },
+    { label: 'Bangladesh', value: 'bd', countryCode: 'bd', latitude: 23.685, longitude: 90.3563 },
+    { label: 'Pakistan', value: 'pk', countryCode: 'pk', latitude: 30.3753, longitude: 69.3451 },
+    { label: 'Nepal', value: 'np', countryCode: 'np', latitude: 28.3949, longitude: 84.124 },
+    { label: 'Sri Lanka', value: 'lk', countryCode: 'lk', latitude: 7.8731, longitude: 80.7718 },
+    { label: 'United Arab Emirates', value: 'ae', countryCode: 'ae', latitude: 23.4241, longitude: 53.8478 },
+    { label: 'Saudi Arabia', value: 'sa', countryCode: 'sa', latitude: 23.8859, longitude: 45.0792 },
   ];
 
   const POPULAR_REGIONS = [
-    ...INDIAN_STATES,
+    ...INDIAN_STATES.map(s => ({ ...s, countryCode: 'in' })),
     ...COUNTRIES,
-    { label: 'Mumbai', value: 'mumbai', latitude: 19.076, longitude: 72.8777 },
-    { label: 'Chennai', value: 'chennai', latitude: 13.0827, longitude: 80.2707 },
-    { label: 'New York (NYC)', value: 'nyc', latitude: 40.7128, longitude: -74.006 },
-    { label: 'Los Angeles (LA)', value: 'la', latitude: 34.0522, longitude: -118.2437 },
-    { label: 'Sydney', value: 'sydney', latitude: -33.8688, longitude: 151.2093 },
-    { label: 'Melbourne', value: 'melbourne', latitude: -37.8136, longitude: 144.9631 },
-    { label: 'London', value: 'london', latitude: 51.5074, longitude: -0.1278 },
-    { label: 'Toronto', value: 'toronto', latitude: 43.6532, longitude: -79.3832 },
-    { label: 'Bangkok', value: 'bangkok', latitude: 13.7563, longitude: 100.5018 },
+    { label: 'Mumbai', value: 'mumbai', countryCode: 'in', latitude: 19.076, longitude: 72.8777 },
+    { label: 'Chennai', value: 'chennai', countryCode: 'in', latitude: 13.0827, longitude: 80.2707 },
+    { label: 'Vellore', value: 'vellore', countryCode: 'in', latitude: 12.9165, longitude: 79.1325 },
+    { label: 'Bengaluru', value: 'bengaluru', countryCode: 'in', latitude: 12.9716, longitude: 77.5946 },
+    { label: 'Hyderabad', value: 'hyderabad', countryCode: 'in', latitude: 17.385, longitude: 78.4867 },
+    { label: 'New York', value: 'nyc', countryCode: 'us', latitude: 40.7128, longitude: -74.006 },
+    { label: 'Los Angeles', value: 'la', countryCode: 'us', latitude: 34.0522, longitude: -118.2437 },
+    { label: 'Sydney', value: 'sydney', countryCode: 'au', latitude: -33.8688, longitude: 151.2093 },
+    { label: 'London', value: 'london', countryCode: 'gb', latitude: 51.5074, longitude: -0.1278 },
+    { label: 'Toronto', value: 'toronto', countryCode: 'ca', latitude: 43.6532, longitude: -79.3832 },
+    { label: 'Bangkok', value: 'bangkok', countryCode: 'th', latitude: 13.7563, longitude: 100.5018 },
+    { label: 'Dubai', value: 'dubai', countryCode: 'ae', latitude: 25.2048, longitude: 55.2708 },
+    { label: 'Colombo', value: 'colombo', countryCode: 'lk', latitude: 6.9271, longitude: 79.8612 },
+    { label: 'Dhaka', value: 'dhaka', countryCode: 'bd', latitude: 23.8103, longitude: 90.4125 },
+    { label: 'Karachi', value: 'karachi', countryCode: 'pk', latitude: 24.8607, longitude: 67.0011 },
+    { label: 'Kathmandu', value: 'kathmandu', countryCode: 'np', latitude: 27.7172, longitude: 85.3240 },
   ];
 
   const REGION_OPTIONS = POPULAR_REGIONS;
 
-  // Coordinates for each region (add more as needed)
-  // Build REGION_COORDS from REGION_OPTIONS
-  const REGION_COORDS = REGION_OPTIONS.reduce((acc, region) => {
-    if (region.latitude && region.longitude) {
-      acc[region.value] = { latitude: region.latitude, longitude: region.longitude };
-    }
-    return acc;
-  }, {});
-
-  const REGION_CODE_MAP = {
-    india: 'in',
-    usa: 'us',
-    "united states": 'us',
-    uk: 'uk',
-    "united kingdom": 'uk',
-    australia: 'au',
-    singapore: 'sg',
-    "tamil nadu": 'tamil nadu',
-    mumbai: 'mumbai',
-    delhi: 'delhi',
-    nyc: 'us',
-    "new york": 'us',
-    la: 'us',
-    "los angeles": 'us',
-    london: 'uk',
-    sydney: 'au',
-    melbourne: 'au',
-    tokyo: 'jp',
-    paris: 'fr',
-  };
   const [loading, setLoading] = useState(false);
   const [forecastData, setForecastData] = useState(null);
   const [regionDropdownVisible, setRegionDropdownVisible] = useState(false);
-  const [gpsRegion, setGpsRegion] = useState(null);
   const [locating, setLocating] = useState(false);
   const pendingSuggestionRef = useRef(null);
 
@@ -294,6 +271,25 @@ export default function App() {
   // Remove static lat/lon
 
 
+  const geocodeCity = async (query) => {
+    const res = await axios.get('https://geocoding-api.open-meteo.com/v1/search', {
+      params: { name: query, count: 1, language: 'en', format: 'json' },
+      timeout: 6000,
+    });
+    return res.data.results?.[0] || null;
+  };
+
+  const applyGeoResult = (result, isGps = false) => {
+    if (!result) return false;
+    setRegionCoords({ latitude: result.latitude, longitude: result.longitude });
+    setRegionCountryCode((result.country_code || 'global').toLowerCase());
+    const label = [result.name, result.admin1, result.country].filter(Boolean).join(', ');
+    setRegionLabel(label);
+    setRegionInput(result.name);
+    setGpsDetected(isGps);
+    return true;
+  };
+
   const determineRegion = async () => {
     if (locating) return;
     setLocating(true);
@@ -303,74 +299,46 @@ export default function App() {
         setLocationStatus('denied');
         Alert.alert(
           'Location Permission Denied',
-          'Go to device Settings → Apps → WeatherMed → Permissions and enable Location, then try again.',
+          'Go to Settings → Apps → WeatherMed → Permissions and enable Location, then try again.',
           [{ text: 'OK' }]
         );
         return;
       }
 
-      // Use cached OS location first (works indoors, instant).
-      // Only request a fresh fix if no cache exists.
+      // Try cached OS position first (instant, works indoors).
       let location = await Location.getLastKnownPositionAsync({});
       if (!location) {
         location = await Promise.race([
           Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low }),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('GPS timeout')), 15000)
-          ),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 15000)),
         ]);
       }
 
-      const [address] = await Location.reverseGeocodeAsync({
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-      });
+      const { latitude, longitude } = location.coords;
 
-      // Try from most specific to least: city → subregion → region → country
-      const candidates = [
-        address.city,
-        address.subregion,
-        address.region,
-        address.country,
-      ].filter(Boolean).map(s => s.toLowerCase());
+      // Reverse geocode to get city/country names
+      const [address] = await Location.reverseGeocodeAsync({ latitude, longitude });
 
-      let found = null;
-      for (const candidate of candidates) {
-        found = REGION_OPTIONS.find(
-          opt => opt.label.toLowerCase() === candidate || opt.value === candidate
-        );
-        if (!found) {
-          const mapped = REGION_CODE_MAP[candidate];
-          if (mapped) found = REGION_OPTIONS.find(opt => opt.value === mapped);
-        }
-        if (found) break;
-      }
+      // Build a human-readable label: City, State, Country
+      const city    = address.city || address.district || address.subregion || '';
+      const state   = address.region || '';
+      const country = address.country || '';
+      const label   = [city, state, country].filter(Boolean).join(', ');
+      const countryCode = (address.isoCountryCode || 'IN').toLowerCase();
 
-      const detectedLabel = found
-        ? found.label
-        : (candidates[0] || 'Unknown').replace(/^\w/, c => c.toUpperCase());
-
-      if (found) {
-        setGpsRegion(found.value);
-        setRegionKey(found.value);
-        setRegionLabel(found.label);
-        setRegionInput(found.label);
-      } else {
-        const raw = candidates[0] || 'unknown';
-        setGpsRegion(raw);
-        setRegionKey(raw);
-        setRegionLabel(detectedLabel);
-        setRegionInput(detectedLabel);
-      }
+      setRegionCoords({ latitude, longitude });
+      setRegionCountryCode(countryCode);
+      setRegionLabel(label);
+      setRegionInput(city || state);
+      setGpsDetected(true);
       setLocationStatus('granted');
-      Alert.alert('Location Detected', `Region set to: ${detectedLabel}`, [{ text: 'OK' }]);
+      Alert.alert('Location Detected', label, [{ text: 'OK' }]);
     } catch (error) {
       console.warn('Location detection failed:', error);
-      // Don't wipe a previously detected region on failure — keep what we have
       if (locationStatus !== 'granted') setLocationStatus('error');
       Alert.alert(
-        'Could Not Refresh Location',
-        'Using your last known region. You can also type your city in the region box above.',
+        'Could Not Detect Location',
+        'Using last known region. You can also type any city name in the box above.',
         [{ text: 'OK' }]
       );
     } finally {
@@ -428,19 +396,15 @@ export default function App() {
   };
 
   useEffect(() => {
-    const effectiveRegion = gpsRegion || regionKey;
-    const effectiveLabel = REGION_OPTIONS.find(opt => opt.value === effectiveRegion)?.label || regionLabel;
-    const coords = REGION_COORDS[effectiveRegion] || REGION_COORDS['in'];
-
     const fetchForecast = async () => {
       try {
         const response = await axios.get('https://api.open-meteo.com/v1/forecast', {
           params: {
-            latitude: coords.latitude,
-            longitude: coords.longitude,
+            latitude: regionCoords.latitude,
+            longitude: regionCoords.longitude,
             daily: 'temperature_2m_max,temperature_2m_min,weathercode,windspeed_10m_max',
             hourly: 'relativehumidity_2m',
-            timezone: 'Asia/Kolkata',
+            timezone: 'auto',
           },
         });
         setForecastData(response.data);
@@ -452,10 +416,10 @@ export default function App() {
     const fetchOutbreaks = async () => {
       let list = [];
       if (DEMO_MODE) {
-        list = getDemoOutbreaks(effectiveRegion);
+        list = getDemoOutbreaks(regionCountryCode);
       } else {
         try {
-          list = await getOutbreaks(effectiveRegion) || [];
+          list = await getOutbreaks(regionCountryCode) || [];
         } catch (error) {
           console.warn('Failed to load outbreak data.', error);
         }
@@ -466,8 +430,7 @@ export default function App() {
 
     fetchForecast();
     fetchOutbreaks();
-    setRegionLabel(effectiveLabel);
-  }, [regionKey, gpsRegion]);
+  }, [regionCoords, regionCountryCode]);
 
   const onDayPress = async (day) => {
     try {
@@ -532,8 +495,6 @@ export default function App() {
       setLoading(false);
     }
   };
-
-  const activeRegion = gpsRegion || regionKey;
 
   const filteredRegionOptions = REGION_OPTIONS.filter((option) => {
     const q = (regionInput || '').trim().toLowerCase();
@@ -639,7 +600,7 @@ export default function App() {
       ) : null}
       <Text style={styles.subHeader}>
         Region: {regionLabel || 'unknown'}
-        {gpsRegion ? ' (auto-detected)' : ''}
+        {gpsDetected ? ' 📍' : ''}
         {locationStatus === 'denied' ? ' (location permission denied)' : ''}
       </Text>
       <View style={styles.regionContainer}>
@@ -653,68 +614,32 @@ export default function App() {
           }}
           onFocus={() => setRegionDropdownVisible(regionInput.length > 0)}
           onBlur={() => {
-            setTimeout(() => {
-              // If user tapped a suggestion, apply it and skip text normalization
+            setTimeout(async () => {
               if (pendingSuggestionRef.current) {
                 const opt = pendingSuggestionRef.current;
                 pendingSuggestionRef.current = null;
-                setRegionInput(opt.label);
-                setRegionKey(opt.value);
+                setRegionCoords({ latitude: opt.latitude, longitude: opt.longitude });
+                setRegionCountryCode((opt.countryCode || opt.value || 'global').toLowerCase());
                 setRegionLabel(opt.label);
-                setGpsRegion(null);
+                setRegionInput(opt.label);
+                setGpsDetected(false);
                 setRegionDropdownVisible(false);
                 return;
               }
               setRegionDropdownVisible(false);
-              if (regionInput.trim()) {
-                let found = REGION_OPTIONS.find(opt => opt.label.toLowerCase() === regionInput.trim().toLowerCase() || opt.value === regionInput.trim().toLowerCase());
-                if (!found) {
-                  const normalized = REGION_CODE_MAP[regionInput.trim().toLowerCase()] || regionInput.trim().toLowerCase();
-                  found = REGION_OPTIONS.find(opt => opt.value === normalized);
-                  if (found) {
-                    setRegionKey(found.value);
-                    setRegionLabel(found.label);
-                    setRegionInput(found.label);
-                    setGpsRegion(null);
-                  } else {
-                    setRegionKey(normalized);
-                    setRegionLabel(regionInput.trim());
-                    setRegionInput(regionInput.trim());
-                    setGpsRegion(null);
-                  }
-                } else {
-                  setRegionKey(found.value);
-                  setRegionLabel(found.label);
-                  setRegionInput(found.label);
-                  setGpsRegion(null);
-                }
-              }
             }, 300);
           }}
-          onSubmitEditing={() => {
-            if (regionInput.trim()) {
-              let found = REGION_OPTIONS.find(opt => opt.label.toLowerCase() === regionInput.trim().toLowerCase() || opt.value === regionInput.trim().toLowerCase());
-              if (!found) {
-                const normalized = REGION_CODE_MAP[regionInput.trim().toLowerCase()] || regionInput.trim().toLowerCase();
-                found = REGION_OPTIONS.find(opt => opt.value === normalized);
-                if (found) {
-                  setRegionKey(found.value);
-                  setRegionLabel(found.label);
-                  setRegionInput(found.label); // Always set input to full label
-                  setGpsRegion(null);
-                } else {
-                  setRegionKey(normalized);
-                  setRegionLabel(regionInput.trim());
-                  setRegionInput(regionInput.trim());
-                  setGpsRegion(null);
-                }
-              } else {
-                setRegionKey(found.value);
-                setRegionLabel(found.label);
-                setRegionInput(found.label); // Always set input to full label
-                setGpsRegion(null);
+          onSubmitEditing={async () => {
+            const query = regionInput.trim();
+            if (!query) return;
+            setRegionDropdownVisible(false);
+            try {
+              const result = await geocodeCity(query);
+              if (!applyGeoResult(result)) {
+                Alert.alert('Not Found', `Could not find "${query}". Try a different city or country name.`);
               }
-              setRegionDropdownVisible(false);
+            } catch {
+              Alert.alert('Search Error', 'Could not search for that location. Check your internet connection.');
             }
           }}
         />
@@ -726,10 +651,12 @@ export default function App() {
                   key={option.value}
                   style={styles.dropdownItem}
                   onPress={() => {
-                    setRegionInput(option.label);
-                    setRegionKey(option.value);
+                    pendingSuggestionRef.current = option;
+                    setRegionCoords({ latitude: option.latitude, longitude: option.longitude });
+                    setRegionCountryCode((option.countryCode || option.value || 'global').toLowerCase());
                     setRegionLabel(option.label);
-                    setGpsRegion(null);
+                    setRegionInput(option.label);
+                    setGpsDetected(false);
                     setRegionDropdownVisible(false);
                     Keyboard.dismiss();
                   }}
