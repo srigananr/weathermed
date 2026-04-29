@@ -32,7 +32,6 @@ import axios from 'axios';
 import * as Location from 'expo-location';
 import { predictDisease } from './model/predict';
 import { getOutbreaks } from './services/outbreakService';
-import { OUTBREAK_API_URL, DEMO_MODE } from './config';
 
 const PREVENTION_BY_DISEASE = {
   'Heat Stroke': 'Stay hydrated, avoid direct sun exposure, and take breaks in the shade.',
@@ -336,18 +335,6 @@ export default function App() {
     };
 
     const fetchOutbreaks = async () => {
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 8000);
-        const backendUrl = `${OUTBREAK_API_URL}/api/outbreaks?region=${encodeURIComponent(effectiveRegion)}${DEMO_MODE ? '&demo=true' : ''}`;
-        const response = await fetch(backendUrl, { signal: controller.signal });
-        clearTimeout(timeout);
-        if (response.ok) {
-          const { outbreaks: list } = await response.json();
-          setOutbreaks(list || []);
-          return;
-        }
-      } catch {}
       try {
         const list = await getOutbreaks(effectiveRegion);
         setOutbreaks(list || []);
