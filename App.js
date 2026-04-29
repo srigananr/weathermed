@@ -303,26 +303,30 @@ export default function App() {
         setLocationStatus('denied');
         Alert.alert(
           'Location Permission Denied',
-          'Please enable location access in your device Settings → Apps → WeatherMed → Permissions, then try again.',
+          'Go to device Settings → Apps → WeatherMed → Permissions and enable Location, then try again.',
           [{ text: 'OK' }]
         );
         return;
       }
 
-      // Race GPS against a 10-second timeout so the button never hangs
-      const location = await Promise.race([
-        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low }),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('GPS timeout')), 10000)
-        ),
-      ]);
+      // Use cached OS location first (works indoors, instant).
+      // Only request a fresh fix if no cache exists.
+      let location = await Location.getLastKnownPositionAsync({});
+      if (!location) {
+        location = await Promise.race([
+          Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low }),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('GPS timeout')), 15000)
+          ),
+        ]);
+      }
 
       const [address] = await Location.reverseGeocodeAsync({
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
       });
 
-      // Try city first, then subregion, then country
+      // Try from most specific to least: city → subregion → region → country
       const candidates = [
         address.city,
         address.subregion,
@@ -362,12 +366,11 @@ export default function App() {
       Alert.alert('Location Detected', `Region set to: ${detectedLabel}`, [{ text: 'OK' }]);
     } catch (error) {
       console.warn('Location detection failed:', error);
-      setLocationStatus('error');
+      // Don't wipe a previously detected region on failure — keep what we have
+      if (locationStatus !== 'granted') setLocationStatus('error');
       Alert.alert(
-        'Location Error',
-        error.message === 'GPS timeout'
-          ? 'GPS is taking too long. Make sure you are outdoors or near a window, then try again.'
-          : 'Could not detect your location. Please select your region manually from the list.',
+        'Could Not Refresh Location',
+        'Using your last known region. You can also type your city in the region box above.',
         [{ text: 'OK' }]
       );
     } finally {
@@ -637,7 +640,7 @@ export default function App() {
       <Text style={styles.subHeader}>
         Region: {regionLabel || 'unknown'}
         {gpsRegion ? ' (auto-detected)' : ''}
-        {locationStatus === 'denied' ? ' (location denied)' : locationStatus === 'error' ? ' (location error)' : ''}
+        {locationStatus === 'denied' ? ' (location permission denied)' : ''}
       </Text>
       <View style={styles.regionContainer}>
         <TextInput
