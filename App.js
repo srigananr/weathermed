@@ -11,6 +11,7 @@ import {
   Switch,
   Keyboard,
   Image,
+  Alert,
 } from 'react-native';
 // Weather code to icon mapping
 const weatherCodeToIcon = (code) => {
@@ -32,6 +33,47 @@ import axios from 'axios';
 import * as Location from 'expo-location';
 import { predictDisease } from './model/predict';
 import { getOutbreaks } from './services/outbreakService';
+import { DEMO_MODE } from './config';
+
+const DEMO_OUTBREAKS = {
+  in: [
+    { id: 'demo-in-1', name: 'Dengue Fever Surge — Chennai & Tamil Nadu', active: true,
+      prevention: 'Use mosquito repellent, wear long sleeves, eliminate standing water, and use bed nets.',
+      notes: 'Tamil Nadu health authorities report a 40% rise in dengue cases this monsoon. Aedes mosquito breeding sites identified in Chennai and Madurai.' },
+    { id: 'demo-in-2', name: 'Cholera Alert — Flood-Affected Coastal Districts', active: true,
+      prevention: 'Drink only safe or boiled water, wash hands with soap, eat thoroughly cooked food.',
+      notes: 'Floodwater contamination has elevated cholera risk in coastal Andhra Pradesh and Odisha.' },
+    { id: 'demo-in-3', name: 'Influenza (H3N2) Circulation — Northern India', active: true,
+      prevention: 'Get the annual flu vaccine, wash hands frequently, wear a mask in crowded spaces.',
+      notes: 'ICMR reports H3N2 influenza active in Delhi NCR, Punjab, and Haryana.' },
+  ],
+  us: [
+    { id: 'demo-us-1', name: 'West Nile Virus Activity — Southern States', active: true,
+      prevention: 'Use insect repellent, wear long sleeves at dusk, eliminate standing water near your home.',
+      notes: 'CDC reports elevated West Nile virus activity in Texas, Louisiana, and Florida.' },
+    { id: 'demo-us-2', name: 'Influenza Season Early Onset — Northeast USA', active: true,
+      prevention: 'Get the annual flu vaccine, wash hands frequently, avoid close contact with sick individuals.',
+      notes: 'CDC FluView shows above-baseline influenza activity in New York and Massachusetts.' },
+  ],
+  global: [
+    { id: 'demo-g-1', name: 'WHO Alert: Mpox Clade I Spread', active: true,
+      prevention: 'Avoid close skin-to-skin contact with infected individuals and practise good hand hygiene.',
+      notes: 'WHO reports Mpox Clade I cases across multiple countries. Travellers advised to take precautions.' },
+    { id: 'demo-g-2', name: 'Global Influenza Season Underway', active: true,
+      prevention: 'Get the annual flu vaccine, wash hands frequently, wear a mask in crowded spaces.',
+      notes: 'WHO FluNet indicates influenza A(H3N2) and B/Victoria co-circulating across the Northern Hemisphere.' },
+  ],
+};
+
+function getDemoOutbreaks(region) {
+  const r = (region || 'global').toLowerCase();
+  // Indian cities/states → use India alerts
+  const indiaKeywords = ['chennai', 'mumbai', 'delhi', 'bangalore', 'kolkata',
+    'hyderabad', 'kerala', 'tamil', 'maharashtra', 'gujarat', 'india', 'in'];
+  if (indiaKeywords.some(k => r.includes(k))) return DEMO_OUTBREAKS.in;
+  if (r === 'us' || r.includes('united states') || r.includes('america')) return DEMO_OUTBREAKS.us;
+  return DEMO_OUTBREAKS[r] || DEMO_OUTBREAKS.global;
+}
 
 const PREVENTION_BY_DISEASE = {
   'Heat Stroke': 'Stay hydrated, avoid direct sun exposure, and take breaks in the shade.',
@@ -229,19 +271,22 @@ export default function App() {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         setLocationStatus('denied');
+        Alert.alert(
+          'Location Permission Denied',
+          'Please enable location access in your device settings, then try again.',
+          [{ text: 'OK' }]
+        );
         return;
       }
 
-      const location = await Location.getCurrentPositionAsync({});
+      const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       const [address] = await Location.reverseGeocodeAsync(
         { latitude: location.coords.latitude, longitude: location.coords.longitude },
       );
 
-      // Try to match city, region, or country to REGION_OPTIONS
       const rawRegion = (address.city || address.region || address.country)?.toString().toLowerCase();
       let found = REGION_OPTIONS.find(opt => opt.label.toLowerCase() === rawRegion || opt.value === rawRegion);
       if (!found) {
-        // Try mapping
         const mapped = REGION_CODE_MAP[rawRegion] || rawRegion;
         found = REGION_OPTIONS.find(opt => opt.value === mapped);
       }
@@ -261,6 +306,11 @@ export default function App() {
     } catch (error) {
       console.warn('Location detection failed:', error);
       setLocationStatus('error');
+      Alert.alert(
+        'Location Error',
+        'Could not detect your location. Please select your region manually.',
+        [{ text: 'OK' }]
+      );
     }
   };
 
@@ -335,6 +385,10 @@ export default function App() {
     };
 
     const fetchOutbreaks = async () => {
+      if (DEMO_MODE) {
+        setOutbreaks(getDemoOutbreaks(effectiveRegion));
+        return;
+      }
       try {
         const list = await getOutbreaks(effectiveRegion);
         setOutbreaks(list || []);
