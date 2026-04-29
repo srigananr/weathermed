@@ -253,22 +253,38 @@ export default function App() {
 
   const REGION_OPTIONS = POPULAR_REGIONS;
 
+  // ── Auth ──────────────────────────────────────────────────────────────────
+  const ADMIN_USERNAME = 'admin';
+  const ADMIN_PASSWORD = 'weathermed@2024';
+
+  const [loginScreen, setLoginScreen] = useState('welcome'); // 'welcome'|'user'|'admin'|'app'
+  const [userRole, setUserRole] = useState(null);            // 'user'|'admin'
+  const [user, setUser] = useState(null);
+  const [nameInput, setNameInput] = useState('');
+  const [ageInput, setAgeInput] = useState('');
+  const [genderInput, setGenderInput] = useState('');
+  const [adminUsernameInput, setAdminUsernameInput] = useState('');
+  const [adminPasswordInput, setAdminPasswordInput] = useState('');
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
+
+  // ── Admin alerts ──────────────────────────────────────────────────────────
+  const [adminAlerts, setAdminAlerts] = useState([]);
+  const [adminPanelVisible, setAdminPanelVisible] = useState(false);
+  const [newAlertRegion, setNewAlertRegion] = useState('');
+  const [newAlertCountry, setNewAlertCountry] = useState('');
+  const [newAlertDisease, setNewAlertDisease] = useState('');
+  const [newAlertNotes, setNewAlertNotes] = useState('');
+  const [newAlertPrevention, setNewAlertPrevention] = useState('');
+
+  // ── Other UI state ────────────────────────────────────────────────────────
   const [loading, setLoading] = useState(false);
   const [forecastData, setForecastData] = useState(null);
   const [regionDropdownVisible, setRegionDropdownVisible] = useState(false);
   const [locating, setLocating] = useState(false);
   const pendingSuggestionRef = useRef(null);
 
-  const [user, setUser] = useState(null);
-  const [showLogin, setShowLogin] = useState(false);
-  const [nameInput, setNameInput] = useState('');
-  const [ageInput, setAgeInput] = useState('');
-  const [genderInput, setGenderInput] = useState('');
-
   const [symptomsModalVisible, setSymptomsModalVisible] = useState(false);
   const [selectedSymptoms, setSelectedSymptoms] = useState({});
-
-  // Remove static lat/lon
 
 
   const geocodeCity = async (query) => {
@@ -352,38 +368,75 @@ export default function App() {
   }, []);
 
 
-  // Load stored user profile and symptom choices
+  // Restore session on launch
   useEffect(() => {
-    const loadProfile = async () => {
+    (async () => {
       try {
-        const storedUser = await AsyncStorage.getItem('userProfile');
-        const storedSymptoms = await AsyncStorage.getItem('userSymptoms');
-
-        if (storedUser) {
+        const [storedRole, storedUser, storedSymptoms, storedAdminAlerts] = await Promise.all([
+          AsyncStorage.getItem('userRole'),
+          AsyncStorage.getItem('userProfile'),
+          AsyncStorage.getItem('userSymptoms'),
+          AsyncStorage.getItem('adminAlerts'),
+        ]);
+        if (storedAdminAlerts) setAdminAlerts(JSON.parse(storedAdminAlerts));
+        if (storedRole === 'admin') {
+          setUserRole('admin');
+          setLoginScreen('app');
+        } else if (storedRole === 'user' && storedUser) {
           setUser(JSON.parse(storedUser));
+          setUserRole('user');
+          setLoginScreen('app');
         } else {
-          setShowLogin(true);
+          setLoginScreen('welcome');
         }
-
-        if (storedSymptoms) {
-          setSelectedSymptoms(JSON.parse(storedSymptoms));
-        }
-      } catch (error) {
-        console.warn('Failed to load stored profile/symptoms.', error);
+        if (storedSymptoms) setSelectedSymptoms(JSON.parse(storedSymptoms));
+      } catch (e) {
+        setLoginScreen('welcome');
       }
-    };
-
-    loadProfile();
+    })();
   }, []);
 
   const saveProfile = async (profile) => {
     try {
       await AsyncStorage.setItem('userProfile', JSON.stringify(profile));
+      await AsyncStorage.setItem('userRole', 'user');
       setUser(profile);
-      setShowLogin(false);
+      setUserRole('user');
+      setLoginScreen('app');
     } catch (error) {
       console.warn('Failed to save user profile.', error);
     }
+  };
+
+  const loginAdmin = async () => {
+    if (adminUsernameInput.trim() === ADMIN_USERNAME && adminPasswordInput === ADMIN_PASSWORD) {
+      await AsyncStorage.setItem('userRole', 'admin');
+      setUserRole('admin');
+      setAdminUsernameInput('');
+      setAdminPasswordInput('');
+      setLoginScreen('app');
+    } else {
+      Alert.alert('Invalid Credentials', 'Incorrect username or password.');
+    }
+  };
+
+  const logout = async () => {
+    await AsyncStorage.multiRemove(['userRole', 'userProfile']);
+    setUser(null);
+    setUserRole(null);
+    setLoginScreen('welcome');
+  };
+
+  const saveAdminAlert = async (alert) => {
+    const updated = [alert, ...adminAlerts];
+    setAdminAlerts(updated);
+    await AsyncStorage.setItem('adminAlerts', JSON.stringify(updated));
+  };
+
+  const deleteAdminAlert = async (id) => {
+    const updated = adminAlerts.filter(a => a.id !== id);
+    setAdminAlerts(updated);
+    await AsyncStorage.setItem('adminAlerts', JSON.stringify(updated));
   };
 
   const saveSymptoms = async (symptoms) => {
@@ -414,16 +467,21 @@ export default function App() {
     };
 
     const fetchOutbreaks = async () => {
-      let list = [];
+      let fetched = [];
       if (DEMO_MODE) {
-        list = getDemoOutbreaks(regionCountryCode);
+        fetched = getDemoOutbreaks(regionCountryCode);
       } else {
         try {
-          list = await getOutbreaks(regionCountryCode) || [];
+          fetched = await getOutbreaks(regionCountryCode) || [];
         } catch (error) {
           console.warn('Failed to load outbreak data.', error);
         }
       }
+      // Merge admin-created alerts that match current region (country code or 'global')
+      const relevantAdmin = adminAlerts.filter(a =>
+        !a.countryCode || a.countryCode === 'global' || a.countryCode === regionCountryCode
+      );
+      const list = [...relevantAdmin, ...fetched];
       setOutbreaks(list);
       showOutbreakBanner(list);
     };
@@ -535,51 +593,77 @@ export default function App() {
     return weatherCodes[code] || 'Unknown weather';
   };
 
-  if (showLogin) {
+  // ── Welcome screen ─────────────────────────────────────────────────────────
+  if (loginScreen === 'welcome') {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Image source={require('./assets/icon.png')} style={{ width: 100, height: 100, borderRadius: 22, marginBottom: 18 }} />
+        <Text style={styles.header}>WeatherMed</Text>
+        <Text style={[styles.subHeader, { textAlign: 'center', marginBottom: 32 }]}>
+          Weather-based disease prediction{'\n'}and outbreak alerts
+        </Text>
+        <Pressable style={[styles.button, { width: '80%', marginBottom: 14 }]} onPress={() => setLoginScreen('user')}>
+          <Text style={styles.buttonText}>👤  User Login</Text>
+        </Pressable>
+        <Pressable style={[styles.button, { width: '80%', backgroundColor: '#c0392b' }]} onPress={() => setLoginScreen('admin')}>
+          <Text style={styles.buttonText}>🔐  Admin Login</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  // ── User login screen ──────────────────────────────────────────────────────
+  if (loginScreen === 'user') {
     return (
       <View style={styles.container}>
-        <Text style={styles.header}>Welcome to WeatherMed</Text>
-        <Text style={styles.subHeader}>Enter your details to get personalised disease predictions</Text>
-
+        <Pressable onPress={() => setLoginScreen('welcome')} style={{ marginBottom: 8 }}>
+          <Text style={{ color: '#2196F3', fontSize: 15 }}>← Back</Text>
+        </Pressable>
+        <Text style={styles.header}>User Login</Text>
+        <Text style={styles.subHeader}>Enter your details to get personalised predictions</Text>
         <Text style={styles.inputLabel}>Name</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="e.g. Sriganan"
-          value={nameInput}
-          onChangeText={setNameInput}
-        />
+        <TextInput style={styles.input} placeholder="e.g. Sriganan" value={nameInput} onChangeText={setNameInput} />
         <Text style={styles.inputLabel}>Age</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="e.g. 22"
-          value={ageInput}
-          onChangeText={setAgeInput}
-          keyboardType="numeric"
-        />
+        <TextInput style={styles.input} placeholder="e.g. 22" value={ageInput} onChangeText={setAgeInput} keyboardType="numeric" />
         <Text style={styles.inputLabel}>Gender</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="male / female / other"
-          value={genderInput}
-          onChangeText={setGenderInput}
-        />
-
-        <Pressable
-          style={[styles.button, { marginTop: 20 }]}
-          onPress={() => {
-            const profile = {
-              name: nameInput.trim() || 'Anonymous',
-              age: Number(ageInput) || null,
-              gender: (genderInput || '').toLowerCase().trim(),
-            };
-            saveProfile(profile);
-          }}
-        >
+        <TextInput style={styles.input} placeholder="male / female / other" value={genderInput} onChangeText={setGenderInput} />
+        <Pressable style={[styles.button, { marginTop: 20 }]} onPress={() => {
+          const profile = { name: nameInput.trim() || 'Anonymous', age: Number(ageInput) || null, gender: (genderInput || '').toLowerCase().trim() };
+          saveProfile(profile);
+        }}>
           <Text style={styles.buttonText}>Continue</Text>
         </Pressable>
       </View>
     );
   }
+
+  // ── Admin login screen ─────────────────────────────────────────────────────
+  if (loginScreen === 'admin') {
+    return (
+      <View style={styles.container}>
+        <Pressable onPress={() => setLoginScreen('welcome')} style={{ marginBottom: 8 }}>
+          <Text style={{ color: '#2196F3', fontSize: 15 }}>← Back</Text>
+        </Pressable>
+        <Text style={styles.header}>Admin Login</Text>
+        <Text style={styles.subHeader}>Enter admin credentials</Text>
+        <Text style={styles.inputLabel}>Username</Text>
+        <TextInput style={styles.input} placeholder="admin" value={adminUsernameInput} onChangeText={setAdminUsernameInput} autoCapitalize="none" />
+        <Text style={styles.inputLabel}>Password</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <TextInput style={[styles.input, { flex: 1 }]} placeholder="••••••••" value={adminPasswordInput}
+            onChangeText={setAdminPasswordInput} secureTextEntry={!showAdminPassword} autoCapitalize="none" />
+          <Pressable onPress={() => setShowAdminPassword(v => !v)} style={{ padding: 10 }}>
+            <Text style={{ fontSize: 18 }}>{showAdminPassword ? '🙈' : '👁️'}</Text>
+          </Pressable>
+        </View>
+        <Pressable style={[styles.button, { marginTop: 20, backgroundColor: '#c0392b' }]} onPress={loginAdmin}>
+          <Text style={styles.buttonText}>Login as Admin</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  if (loginScreen !== 'app') return null;
 
   return (
     <View style={styles.container}>
@@ -595,9 +679,12 @@ export default function App() {
       </Animated.View>
 
       <Text style={styles.header}>Disease Prediction Calendar</Text>
-      {user ? (
-        <Text style={styles.subHeader}>Hello, {user.name} ({user.age || 'N/A'}, {user.gender || 'N/A'})</Text>
-      ) : null}
+      {userRole === 'admin'
+        ? <Text style={[styles.subHeader, { color: '#c0392b', fontWeight: 'bold' }]}>🔐 Admin Mode</Text>
+        : user
+          ? <Text style={styles.subHeader}>Hello, {user.name} ({user.age || 'N/A'}, {user.gender || 'N/A'})</Text>
+          : null
+      }
       <Text style={styles.subHeader}>
         Region: {regionLabel || 'unknown'}
         {gpsDetected ? ' 📍' : ''}
@@ -688,6 +775,24 @@ export default function App() {
         onPress={() => setSymptomsModalVisible(true)}
       >
         <Text style={styles.buttonText}>Select Symptoms</Text>
+      </Pressable>
+
+      {/* Admin panel button — only for admins */}
+      {userRole === 'admin' && (
+        <Pressable
+          style={[styles.button, { marginTop: 10, width: '60%', backgroundColor: '#c0392b' }]}
+          onPress={() => setAdminPanelVisible(true)}
+        >
+          <Text style={styles.buttonText}>🔐 Admin Panel</Text>
+        </Pressable>
+      )}
+
+      {/* Logout */}
+      <Pressable onPress={() => Alert.alert('Logout', 'Are you sure?', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Logout', style: 'destructive', onPress: logout },
+      ])} style={{ marginTop: 10 }}>
+        <Text style={{ color: '#888', fontSize: 13 }}>Logout ({userRole})</Text>
       </Pressable>
 
 
@@ -781,6 +886,84 @@ export default function App() {
             >
               <Text style={styles.buttonText}>Close</Text>
             </Pressable>
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {/* ── Admin Panel Modal ──────────────────────────────────────────── */}
+      <Modal visible={adminPanelVisible} animationType="slide" transparent={false}
+        onRequestClose={() => setAdminPanelVisible(false)}>
+        <View style={{ flex: 1, backgroundColor: '#fff', paddingTop: 50, paddingHorizontal: 16 }}>
+          <ScrollView>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <Text style={[styles.header, { fontSize: 20 }]}>🔐 Admin Panel</Text>
+              <Pressable onPress={() => setAdminPanelVisible(false)}>
+                <Text style={{ color: '#2196F3', fontSize: 16 }}>Close</Text>
+              </Pressable>
+            </View>
+
+            {/* Create new alert */}
+            <Text style={[styles.inputLabel, { fontSize: 15, fontWeight: 'bold', color: '#c0392b', marginBottom: 8 }]}>
+              Create Outbreak Alert
+            </Text>
+            <Text style={styles.inputLabel}>Disease Name *</Text>
+            <TextInput style={styles.input} placeholder="e.g. Dengue, Cholera, Mpox"
+              value={newAlertDisease} onChangeText={setNewAlertDisease} />
+            <Text style={styles.inputLabel}>Region Label (shown to users) *</Text>
+            <TextInput style={styles.input} placeholder="e.g. Chennai, Tamil Nadu, Global"
+              value={newAlertRegion} onChangeText={setNewAlertRegion} />
+            <Text style={styles.inputLabel}>Country Code (2-letter, or 'global') *</Text>
+            <TextInput style={styles.input} placeholder="e.g. in, us, gb, global"
+              value={newAlertCountry} onChangeText={v => setNewAlertCountry(v.toLowerCase())}
+              autoCapitalize="none" />
+            <Text style={styles.inputLabel}>Description / Notes</Text>
+            <TextInput style={[styles.input, { height: 70 }]} placeholder="Brief description of the outbreak..."
+              value={newAlertNotes} onChangeText={setNewAlertNotes} multiline />
+            <Text style={styles.inputLabel}>Prevention Advice</Text>
+            <TextInput style={[styles.input, { height: 70 }]} placeholder="Preventive measures for users..."
+              value={newAlertPrevention} onChangeText={setNewAlertPrevention} multiline />
+            <Pressable style={[styles.button, { backgroundColor: '#c0392b', marginTop: 8, marginBottom: 24 }]}
+              onPress={async () => {
+                if (!newAlertDisease.trim() || !newAlertCountry.trim()) {
+                  Alert.alert('Missing Fields', 'Disease name and country code are required.');
+                  return;
+                }
+                const alert = {
+                  id: `admin-${Date.now()}`,
+                  name: `${newAlertDisease.trim()} — ${newAlertRegion.trim() || newAlertCountry.trim()}`,
+                  active: true,
+                  countryCode: newAlertCountry.trim(),
+                  prevention: newAlertPrevention.trim() || 'Follow local health authority guidelines.',
+                  notes: `${newAlertNotes.trim()} (Source: WeatherMed Admin)`,
+                };
+                await saveAdminAlert(alert);
+                setNewAlertDisease(''); setNewAlertRegion(''); setNewAlertCountry('');
+                setNewAlertNotes(''); setNewAlertPrevention('');
+                Alert.alert('Alert Created', `"${alert.name}" is now visible to users in region "${alert.countryCode}".`);
+              }}>
+              <Text style={styles.buttonText}>+ Publish Alert</Text>
+            </Pressable>
+
+            {/* Existing admin alerts */}
+            <Text style={[styles.inputLabel, { fontSize: 15, fontWeight: 'bold', marginBottom: 8 }]}>
+              Active Admin Alerts ({adminAlerts.length})
+            </Text>
+            {adminAlerts.length === 0
+              ? <Text style={{ color: '#888', fontStyle: 'italic', marginBottom: 20 }}>No alerts created yet.</Text>
+              : adminAlerts.map(a => (
+                <View key={a.id} style={{ backgroundColor: '#fff3f3', borderRadius: 8, padding: 12, marginBottom: 10 }}>
+                  <Text style={{ fontWeight: 'bold', color: '#c0392b' }}>{a.name}</Text>
+                  <Text style={{ fontSize: 12, color: '#666', marginTop: 2 }}>Region: {a.countryCode}</Text>
+                  {a.notes ? <Text style={{ fontSize: 12, marginTop: 4 }}>{a.notes}</Text> : null}
+                  <Pressable onPress={() => Alert.alert('Delete Alert', `Delete "${a.name}"?`, [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Delete', style: 'destructive', onPress: () => deleteAdminAlert(a.id) },
+                  ])} style={{ marginTop: 8, alignSelf: 'flex-end' }}>
+                    <Text style={{ color: '#c0392b', fontSize: 13 }}>🗑 Delete</Text>
+                  </Pressable>
+                </View>
+              ))
+            }
           </ScrollView>
         </View>
       </Modal>
