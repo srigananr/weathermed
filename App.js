@@ -34,6 +34,15 @@ import * as Location from 'expo-location';
 import { predictDisease } from './model/predict';
 import { getOutbreaks } from './services/outbreakService';
 import { DEMO_MODE } from './config';
+import * as Notifications from 'expo-notifications';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
 
 const DEMO_OUTBREAKS = {
   in: [
@@ -319,6 +328,16 @@ export default function App() {
     determineRegion();
   }, []);
 
+  // Request notification permission on startup
+  useEffect(() => {
+    (async () => {
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== 'granted') {
+        console.warn('Notification permission not granted');
+      }
+    })();
+  }, []);
+
   // Load stored user profile and symptom choices
   useEffect(() => {
     const loadProfile = async () => {
@@ -385,16 +404,28 @@ export default function App() {
     };
 
     const fetchOutbreaks = async () => {
+      let list = [];
       if (DEMO_MODE) {
-        setOutbreaks(getDemoOutbreaks(effectiveRegion));
-        return;
+        list = getDemoOutbreaks(effectiveRegion);
+      } else {
+        try {
+          list = await getOutbreaks(effectiveRegion) || [];
+        } catch (error) {
+          console.warn('Failed to load outbreak data.', error);
+        }
       }
-      try {
-        const list = await getOutbreaks(effectiveRegion);
-        setOutbreaks(list || []);
-      } catch (error) {
-        console.warn('Failed to load outbreak data.', error);
-        setOutbreaks([]);
+      setOutbreaks(list);
+      if (list.length > 0) {
+        const title = list.length === 1
+          ? `Outbreak Alert — ${effectiveLabel}`
+          : `${list.length} Outbreak Alerts — ${effectiveLabel}`;
+        const body = list.length === 1
+          ? list[0].name
+          : list.slice(0, 2).map(o => o.name).join(' • ') + (list.length > 2 ? ` +${list.length - 2} more` : '');
+        await Notifications.scheduleNotificationAsync({
+          content: { title, body, sound: true },
+          trigger: null,
+        }).catch(() => {});
       }
     };
 
