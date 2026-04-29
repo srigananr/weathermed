@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -12,6 +12,7 @@ import {
   Keyboard,
   Image,
   Alert,
+  Animated,
 } from 'react-native';
 // Weather code to icon mapping
 const weatherCodeToIcon = (code) => {
@@ -34,15 +35,6 @@ import * as Location from 'expo-location';
 import { predictDisease } from './model/predict';
 import { getOutbreaks } from './services/outbreakService';
 import { DEMO_MODE } from './config';
-import * as Notifications from 'expo-notifications';
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
 
 const DEMO_OUTBREAKS = {
   in: [
@@ -146,6 +138,19 @@ export default function App() {
   const [weatherData, setWeatherData] = useState(null);
   const [predictions, setPredictions] = useState([]);
   const [outbreaks, setOutbreaks] = useState([]);
+  const [bannerAlerts, setBannerAlerts] = useState([]);
+  const bannerAnim = useRef(new Animated.Value(-120)).current;
+  const bannerTimer = useRef(null);
+
+  const showOutbreakBanner = useCallback((alerts) => {
+    if (!alerts || alerts.length === 0) return;
+    setBannerAlerts(alerts.slice(0, 2));
+    clearTimeout(bannerTimer.current);
+    Animated.spring(bannerAnim, { toValue: 0, useNativeDriver: true }).start();
+    bannerTimer.current = setTimeout(() => {
+      Animated.timing(bannerAnim, { toValue: -120, duration: 400, useNativeDriver: true }).start();
+    }, 5000);
+  }, [bannerAnim]);
   const [regionKey, setRegionKey] = useState('chennai');
   const [regionLabel, setRegionLabel] = useState('Chennai');
   const [regionInput, setRegionInput] = useState('chennai');
@@ -328,15 +333,6 @@ export default function App() {
     determineRegion();
   }, []);
 
-  // Request notification permission on startup
-  useEffect(() => {
-    (async () => {
-      const { status } = await Notifications.requestPermissionsAsync();
-      if (status !== 'granted') {
-        console.warn('Notification permission not granted');
-      }
-    })();
-  }, []);
 
   // Load stored user profile and symptom choices
   useEffect(() => {
@@ -415,18 +411,7 @@ export default function App() {
         }
       }
       setOutbreaks(list);
-      if (list.length > 0) {
-        const title = list.length === 1
-          ? `Outbreak Alert — ${effectiveLabel}`
-          : `${list.length} Outbreak Alerts — ${effectiveLabel}`;
-        const body = list.length === 1
-          ? list[0].name
-          : list.slice(0, 2).map(o => o.name).join(' • ') + (list.length > 2 ? ` +${list.length - 2} more` : '');
-        await Notifications.scheduleNotificationAsync({
-          content: { title, body, sound: true },
-          trigger: null,
-        }).catch(() => {});
-      }
+      showOutbreakBanner(list);
     };
 
     fetchForecast();
@@ -587,6 +572,17 @@ export default function App() {
 
   return (
     <View style={styles.container}>
+      {/* Outbreak alert banner — slides down from top, auto-dismisses after 5s */}
+      <Animated.View style={[styles.outbreakBanner, { transform: [{ translateY: bannerAnim }] }]}
+        pointerEvents="none">
+        <Text style={styles.outbreakBannerTitle}>
+          ⚠️ {bannerAlerts.length === 1 ? '1 Outbreak Alert' : `${bannerAlerts.length} Outbreak Alerts`} — {regionLabel}
+        </Text>
+        {bannerAlerts.map(a => (
+          <Text key={a.id} style={styles.outbreakBannerBody} numberOfLines={1}>• {a.name}</Text>
+        ))}
+      </Animated.View>
+
       <Text style={styles.header}>Disease Prediction Calendar</Text>
       {user ? (
         <Text style={styles.subHeader}>Hello, {user.name} ({user.age || 'N/A'}, {user.gender || 'N/A'})</Text>
@@ -853,6 +849,32 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
+  outbreakBanner: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 999,
+    backgroundColor: '#c0392b',
+    paddingTop: 48,
+    paddingBottom: 14,
+    paddingHorizontal: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 10,
+  },
+  outbreakBannerTitle: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 15,
+    marginBottom: 4,
+  },
+  outbreakBannerBody: {
+    color: '#ffd5d5',
+    fontSize: 13,
+  },
   container: {
     flex: 1,
     paddingTop: 50,
