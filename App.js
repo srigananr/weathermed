@@ -279,6 +279,7 @@ export default function App() {
   const [forecastData, setForecastData] = useState(null);
   const [regionDropdownVisible, setRegionDropdownVisible] = useState(false);
   const [gpsRegion, setGpsRegion] = useState(null);
+  const [locating, setLocating] = useState(false);
   const pendingSuggestionRef = useRef(null);
 
   const [user, setUser] = useState(null);
@@ -294,50 +295,83 @@ export default function App() {
 
 
   const determineRegion = async () => {
+    if (locating) return;
+    setLocating(true);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         setLocationStatus('denied');
         Alert.alert(
           'Location Permission Denied',
-          'Please enable location access in your device settings, then try again.',
+          'Please enable location access in your device Settings → Apps → WeatherMed → Permissions, then try again.',
           [{ text: 'OK' }]
         );
         return;
       }
 
-      const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      const [address] = await Location.reverseGeocodeAsync(
-        { latitude: location.coords.latitude, longitude: location.coords.longitude },
-      );
+      // Race GPS against a 10-second timeout so the button never hangs
+      const location = await Promise.race([
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low }),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('GPS timeout')), 10000)
+        ),
+      ]);
 
-      const rawRegion = (address.city || address.region || address.country)?.toString().toLowerCase();
-      let found = REGION_OPTIONS.find(opt => opt.label.toLowerCase() === rawRegion || opt.value === rawRegion);
-      if (!found) {
-        const mapped = REGION_CODE_MAP[rawRegion] || rawRegion;
-        found = REGION_OPTIONS.find(opt => opt.value === mapped);
+      const [address] = await Location.reverseGeocodeAsync({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      });
+
+      // Try city first, then subregion, then country
+      const candidates = [
+        address.city,
+        address.subregion,
+        address.region,
+        address.country,
+      ].filter(Boolean).map(s => s.toLowerCase());
+
+      let found = null;
+      for (const candidate of candidates) {
+        found = REGION_OPTIONS.find(
+          opt => opt.label.toLowerCase() === candidate || opt.value === candidate
+        );
+        if (!found) {
+          const mapped = REGION_CODE_MAP[candidate];
+          if (mapped) found = REGION_OPTIONS.find(opt => opt.value === mapped);
+        }
+        if (found) break;
       }
+
+      const detectedLabel = found
+        ? found.label
+        : (candidates[0] || 'Unknown').replace(/^\w/, c => c.toUpperCase());
+
       if (found) {
         setGpsRegion(found.value);
         setRegionKey(found.value);
         setRegionLabel(found.label);
         setRegionInput(found.label);
-        setLocationStatus('granted');
       } else {
-        setGpsRegion(rawRegion);
-        setRegionKey(rawRegion);
-        setRegionLabel(rawRegion.charAt(0).toUpperCase() + rawRegion.slice(1));
-        setRegionInput(rawRegion.charAt(0).toUpperCase() + rawRegion.slice(1));
-        setLocationStatus('granted');
+        const raw = candidates[0] || 'unknown';
+        setGpsRegion(raw);
+        setRegionKey(raw);
+        setRegionLabel(detectedLabel);
+        setRegionInput(detectedLabel);
       }
+      setLocationStatus('granted');
+      Alert.alert('Location Detected', `Region set to: ${detectedLabel}`, [{ text: 'OK' }]);
     } catch (error) {
       console.warn('Location detection failed:', error);
       setLocationStatus('error');
       Alert.alert(
         'Location Error',
-        'Could not detect your location. Please select your region manually.',
+        error.message === 'GPS timeout'
+          ? 'GPS is taking too long. Make sure you are outdoors or near a window, then try again.'
+          : 'Could not detect your location. Please select your region manually from the list.',
         [{ text: 'OK' }]
       );
+    } finally {
+      setLocating(false);
     }
   };
 
@@ -706,10 +740,17 @@ export default function App() {
       </View>
 
       <Pressable
-        style={[styles.button, { marginBottom: 10 }]}
-        onPress={() => determineRegion()}
+        style={[styles.button, { marginBottom: 10, opacity: locating ? 0.7 : 1 }]}
+        onPress={determineRegion}
+        disabled={locating}
       >
-        <Text style={styles.buttonText}>Use current location</Text>
+        {locating
+          ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <ActivityIndicator size="small" color="#fff" />
+              <Text style={styles.buttonText}>Detecting location…</Text>
+            </View>
+          : <Text style={styles.buttonText}>📍 Use current location</Text>
+        }
       </Pressable>
 
       <Pressable
