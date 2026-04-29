@@ -30,16 +30,7 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/icon.png",
-          "color": "#c0392b",
-          "sounds": []
-        }
-      ]
-    ],
+    "plugins": ["expo-av"],
     "extra": {
       "eas": {
         "projectId": "c0ba4cfa-d754-4415-bba0-b3792696c242"

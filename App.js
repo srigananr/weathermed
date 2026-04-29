@@ -35,6 +35,7 @@ import * as Location from 'expo-location';
 import { predictDisease } from './model/predict';
 import { getOutbreaks } from './services/outbreakService';
 import { DEMO_MODE } from './config';
+import { Audio } from 'expo-av';
 
 const DEMO_OUTBREAKS = {
   in: [
@@ -142,7 +143,7 @@ export default function App() {
   const bannerAnim = useRef(new Animated.Value(-120)).current;
   const bannerTimer = useRef(null);
 
-  const showOutbreakBanner = useCallback((alerts) => {
+  const showOutbreakBanner = useCallback(async (alerts) => {
     if (!alerts || alerts.length === 0) return;
     setBannerAlerts(alerts.slice(0, 2));
     clearTimeout(bannerTimer.current);
@@ -150,6 +151,18 @@ export default function App() {
     bannerTimer.current = setTimeout(() => {
       Animated.timing(bannerAnim, { toValue: -120, duration: 400, useNativeDriver: true }).start();
     }, 5000);
+    try {
+      await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+      const { sound } = await Audio.Sound.createAsync(
+        require('./assets/alert.wav'),
+        { shouldPlay: true, volume: 1.0 },
+      );
+      sound.setOnPlaybackStatusUpdate(status => {
+        if (status.didJustFinish) sound.unloadAsync();
+      });
+    } catch (e) {
+      // Sound playback is best-effort; never crash the app
+    }
   }, [bannerAnim]);
   const [regionKey, setRegionKey] = useState('chennai');
   const [regionLabel, setRegionLabel] = useState('Chennai');
