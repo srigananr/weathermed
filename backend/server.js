@@ -220,8 +220,36 @@ async function fetchDiseaseData(region) {
 
 // ── Route ─────────────────────────────────────────────────────────────────────
 
+const DEMO_OUTBREAKS = [
+  {
+    id: 'demo-1',
+    name: 'Dengue Fever Surge — Chennai & Tamil Nadu',
+    active: true,
+    prevention: 'Use mosquito repellent, wear long sleeves, eliminate standing water around your home, and use bed nets.',
+    notes: 'Tamil Nadu health authorities report a 40% rise in dengue cases this monsoon. Aedes mosquito breeding sites identified in low-lying areas of Chennai and Madurai. (Source: Demo)',
+  },
+  {
+    id: 'demo-2',
+    name: 'Cholera Alert — Flood-Affected Districts',
+    active: true,
+    prevention: 'Drink only safe or boiled water, wash hands with soap, eat thoroughly cooked food, and avoid raw vegetables in affected areas.',
+    notes: 'Floodwater contamination has elevated cholera risk in parts of coastal Andhra Pradesh and Odisha. Residents advised to boil drinking water. (Source: Demo)',
+  },
+  {
+    id: 'demo-3',
+    name: 'Influenza (H3N2) Circulation — Northern India',
+    active: true,
+    prevention: 'Get the annual flu vaccine, wash hands frequently, avoid close contact with sick individuals, and wear a mask in crowded spaces.',
+    notes: 'ICMR reports H3N2 influenza sub-type active in Delhi NCR, Punjab, and Haryana. High-risk groups urged to seek vaccination. (Source: Demo)',
+  },
+];
+
 app.get('/api/outbreaks', async (req, res) => {
   const region = (req.query.region || 'global').toLowerCase();
+
+  if (req.query.demo === 'true') {
+    return res.json({ region, source: 'DEMO', outbreaks: DEMO_OUTBREAKS });
+  }
 
   try {
     const rssData = await fetchRealTimeOutbreaks(region);
@@ -251,6 +279,82 @@ app.get('/api/outbreaks', async (req, res) => {
     console.warn('GHO error:', e.message);
     return res.json({ region, outbreaks: [] });
   }
+});
+
+// ── Test endpoint ─────────────────────────────────────────────────────────────
+// POST /api/test-outbreak
+// Body: { "title": "...", "description": "...", "region": "in" }
+// Returns how the system would process this news article.
+
+app.use(express.json());
+
+app.post('/api/test-outbreak', (req, res) => {
+  const { title = '', description = '', region = 'global' } = req.body;
+  const prevention = getPreventionForAlert(title, description);
+  const relevant   = isRegionRelevant(title, description, region);
+
+  res.json({
+    input: { title, description, region },
+    result: {
+      isRegionRelevant: relevant,
+      prevention,
+      alert: relevant
+        ? { id: 'test-0', name: title, active: true, prevention,
+            notes: `${description} (Source: Test)` }
+        : null,
+    },
+    message: relevant
+      ? 'This article WOULD appear in outbreak alerts for this region.'
+      : 'This article would NOT appear — region keyword not matched.',
+  });
+});
+
+// GET /api/test-outbreak?scenario=dengue|cholera|covid|india-dengue
+app.get('/api/test-outbreak', (req, res) => {
+  const scenarios = {
+    dengue: {
+      title: 'Dengue fever outbreak spreads across South-East Asia',
+      description: 'Health authorities report a sharp rise in dengue cases.',
+      region: 'global',
+    },
+    cholera: {
+      title: 'Cholera outbreak declared in flood-affected regions',
+      description: 'Contaminated water sources linked to 200 new cholera cases.',
+      region: 'global',
+    },
+    covid: {
+      title: 'New COVID-19 sub-variant detected in multiple countries',
+      description: 'Hospitals see increased admissions as coronavirus cases climb.',
+      region: 'us',
+    },
+    'india-dengue': {
+      title: 'Dengue surge in Chennai and Kerala reported by health ministry',
+      description: 'Tamil Nadu records 1,200 dengue cases this month alone.',
+      region: 'in',
+    },
+    'unrelated': {
+      title: 'Stock market reaches all-time high',
+      description: 'Investors celebrate as Sensex crosses 80,000 points.',
+      region: 'in',
+    },
+  };
+
+  const scenario = scenarios[req.query.scenario] || scenarios['india-dengue'];
+  const { title, description, region } = scenario;
+  const prevention = getPreventionForAlert(title, description);
+  const relevant   = isRegionRelevant(title, description, region);
+
+  res.json({
+    scenario: req.query.scenario || 'india-dengue',
+    input: { title, description, region },
+    result: {
+      isRegionRelevant: relevant,
+      prevention,
+    },
+    message: relevant
+      ? 'This article WOULD appear in outbreak alerts for this region.'
+      : 'This article would NOT appear — region keyword not matched.',
+  });
 });
 
 app.listen(port, '0.0.0.0', () => {
