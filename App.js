@@ -140,17 +140,32 @@ export default function App() {
   const [predictions, setPredictions] = useState([]);
   const [outbreaks, setOutbreaks] = useState([]);
   const [bannerAlerts, setBannerAlerts] = useState([]);
-  const bannerAnim = useRef(new Animated.Value(-120)).current;
+  const [bannerVisible, setBannerVisible] = useState(false);
+  const bannerAnim = useRef(new Animated.Value(-140)).current;
   const bannerTimer = useRef(null);
+  const lastBannerKey = useRef(null); // prevents re-showing for same alert set
+
+  const dismissBanner = useCallback(() => {
+    clearTimeout(bannerTimer.current);
+    Animated.timing(bannerAnim, { toValue: -140, duration: 350, useNativeDriver: true }).start(() => {
+      setBannerVisible(false);
+    });
+  }, [bannerAnim]);
 
   const showOutbreakBanner = useCallback(async (alerts) => {
     if (!alerts || alerts.length === 0) return;
+    // Deduplicate: don't re-show the exact same set of alert IDs
+    const key = alerts.map(a => a.id).join(',');
+    if (key === lastBannerKey.current) return;
+    lastBannerKey.current = key;
+
     setBannerAlerts(alerts.slice(0, 2));
+    setBannerVisible(true);
     clearTimeout(bannerTimer.current);
-    Animated.spring(bannerAnim, { toValue: 0, useNativeDriver: true }).start();
-    bannerTimer.current = setTimeout(() => {
-      Animated.timing(bannerAnim, { toValue: -120, duration: 400, useNativeDriver: true }).start();
-    }, 5000);
+    bannerAnim.setValue(-140);
+    Animated.spring(bannerAnim, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start();
+    bannerTimer.current = setTimeout(dismissBanner, 6000);
+
     try {
       await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
       const { sound } = await Audio.Sound.createAsync(
@@ -161,9 +176,9 @@ export default function App() {
         if (status.didJustFinish) sound.unloadAsync();
       });
     } catch (e) {
-      // Sound playback is best-effort; never crash the app
+      // Sound playback is best-effort
     }
-  }, [bannerAnim]);
+  }, [bannerAnim, dismissBanner]);
   const [regionLabel, setRegionLabel] = useState('Vellore, Tamil Nadu, India');
   const [regionInput, setRegionInput] = useState('Vellore');
   const [regionCoords, setRegionCoords] = useState({ latitude: 12.9165, longitude: 79.1325 });
@@ -490,6 +505,19 @@ export default function App() {
     fetchOutbreaks();
   }, [regionCoords, regionCountryCode]);
 
+  // Re-merge admin alerts immediately when they change (create/delete)
+  useEffect(() => {
+    setOutbreaks(prev => {
+      const nonAdmin = prev.filter(o => !o.id?.startsWith('admin-'));
+      const relevantAdmin = adminAlerts.filter(a =>
+        !a.countryCode || a.countryCode === 'global' || a.countryCode === regionCountryCode
+      );
+      const merged = [...relevantAdmin, ...nonAdmin];
+      if (relevantAdmin.length > 0) showOutbreakBanner(merged);
+      return merged;
+    });
+  }, [adminAlerts]);
+
   const onDayPress = async (day) => {
     try {
       setSelectedDate(day.dateString);
@@ -667,18 +695,36 @@ export default function App() {
 
   return (
     <View style={styles.container}>
-      {/* Outbreak alert banner — slides down from top, auto-dismisses after 5s */}
-      <Animated.View style={[styles.outbreakBanner, { transform: [{ translateY: bannerAnim }] }]}
-        pointerEvents="none">
-        <Text style={styles.outbreakBannerTitle}>
-          ⚠️ {bannerAlerts.length === 1 ? '1 Outbreak Alert' : `${bannerAlerts.length} Outbreak Alerts`} — {regionLabel}
-        </Text>
-        {bannerAlerts.map(a => (
-          <Text key={a.id} style={styles.outbreakBannerBody} numberOfLines={1}>• {a.name}</Text>
-        ))}
-      </Animated.View>
+      {/* Outbreak alert banner — slides down, tappable to dismiss */}
+      {bannerVisible && (
+        <Animated.View style={[styles.outbreakBanner, { transform: [{ translateY: bannerAnim }] }]}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <Text style={[styles.outbreakBannerTitle, { flex: 1 }]}>
+              ⚠️ {bannerAlerts.length === 1 ? '1 Outbreak Alert' : `${bannerAlerts.length} Outbreak Alerts`} — {regionLabel}
+            </Text>
+            <Pressable onPress={dismissBanner} hitSlop={12} style={{ paddingLeft: 10 }}>
+              <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>✕</Text>
+            </Pressable>
+          </View>
+          {bannerAlerts.map(a => (
+            <Text key={a.id} style={styles.outbreakBannerBody} numberOfLines={1}>• {a.name}</Text>
+          ))}
+          <Text style={{ color: '#ffd5d5', fontSize: 11, marginTop: 4 }}>Tap ✕ to dismiss</Text>
+        </Animated.View>
+      )}
 
-      <Text style={styles.header}>Disease Prediction Calendar</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={[styles.header, { flex: 1, textAlign: 'center' }]}>Disease Prediction Calendar</Text>
+        <Pressable
+          onPress={() => Alert.alert('Logout', 'Are you sure you want to logout?', [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Logout', style: 'destructive', onPress: logout },
+          ])}
+          style={{ position: 'absolute', right: 0, padding: 6, backgroundColor: '#eee', borderRadius: 20 }}
+        >
+          <Text style={{ fontSize: 13, color: '#555' }}>⏏ Out</Text>
+        </Pressable>
+      </View>
       {userRole === 'admin'
         ? <Text style={[styles.subHeader, { color: '#c0392b', fontWeight: 'bold' }]}>🔐 Admin Mode</Text>
         : user
@@ -787,13 +833,6 @@ export default function App() {
         </Pressable>
       )}
 
-      {/* Logout */}
-      <Pressable onPress={() => Alert.alert('Logout', 'Are you sure?', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Logout', style: 'destructive', onPress: logout },
-      ])} style={{ marginTop: 10 }}>
-        <Text style={{ color: '#888', fontSize: 13 }}>Logout ({userRole})</Text>
-      </Pressable>
 
 
       <Calendar
@@ -1018,13 +1057,14 @@ export default function App() {
 const styles = StyleSheet.create({
   outbreakBanner: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
+    top: 44,           // below status bar, not over it
+    left: 10,
+    right: 10,
     zIndex: 999,
     backgroundColor: '#c0392b',
-    paddingTop: 48,
-    paddingBottom: 14,
+    borderRadius: 12,
+    paddingTop: 12,
+    paddingBottom: 12,
     paddingHorizontal: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
